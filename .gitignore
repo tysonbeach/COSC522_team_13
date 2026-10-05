@@ -1,3 +1,4 @@
 misc/data/
 .DS_Store
-project/data/
+project/data/*
+!project/data/.gitkeep
