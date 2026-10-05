@@ -2,3 +2,5 @@ misc/data/
 .DS_Store
 project/data/*
 !project/data/.gitkeep
+project/processed/*
+!project/processed/.gitkeep
