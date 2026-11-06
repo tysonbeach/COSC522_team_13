@@ -1,0 +1,9 @@
+year,crashes,vehicles,people,columns,status,file,MB
+2016,34748,52714,86474,410,saved,fars_2016_person.parquet,18
+2017,34560,53128,85840,410,saved,fars_2017_person.parquet,18
+2018,33919,52286,84344,403,saved,fars_2018_person.parquet,18
+2019,33487,51623,82843,404,saved,fars_2019_person.parquet,17
+2020,35935,54552,86396,405,saved,fars_2020_person.parquet,20
+2021,39785,61802,97511,404,saved,fars_2021_person.parquet,22
+2022,39422,60765,96186,404,saved,fars_2022_person.parquet,22
+2023,37769,58508,92768,406,saved,fars_2023_person.parquet,21
