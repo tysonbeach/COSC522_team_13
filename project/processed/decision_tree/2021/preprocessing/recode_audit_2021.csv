@@ -1,0 +1,9 @@
+column,years,mapping,rows_changed,reason
+ROLLOVER,2016-2021,"{1: 3, 2: 3, 9: 3}",14309,tripped/untripped/unknown-type rollovers collapsed into Rollover (3) in 2022
+BODY_TYP,2017-later,{84: 88},281,Motor Scooter (84) split off from Other Motored Cycle (88) in 2017 (manual p. 139)
+BODY_TYP,2017-later,"{85: 82, 86: 82, 87: 82}",81,autocycle/three-wheel codes 85-87 split off from Three-Wheel Motorcycle (82) in 2017 (manual p. 139)
+BODY_TYP,2017-later,{96: 97},364,off-highway utility vehicles (96) split off from Other Vehicle Type (97) in 2017 (manual p. 140)
+SEAT_POS,2019-later,{56: 55},5,Appended to a Motor Vehicle for Motion (56) split off from Riding on Vehicle Exterior (55) in 2019 (manual p. 302)
+VTCONT_F,2016-later,"{2: 1, 4: 1}",85,"Not Functioning (1), Functioning Improperly (2) and the 2019+ combined code (4) merged into 1 in all years, since 4 cannot be split back (manual p. 232)"
+REST_USE,2019-later,{6: 97},11,"JUDGMENT CALL: Racing-Style Harness (6, 2019+) most likely coded Other (97) before; could have been 8 (type unknown) (manual p. 304)"
+DRUNK_DR,2021-later,rebuilt from DR_DRINK,97511,DRUNK_DR removed from the accident file in 2021
