@@ -5,7 +5,8 @@
 # every year in `YEARS`, and saves one person-level table per year to
 # `processed/preprocessed/fars_<YEAR>_person.<SAVE_FORMAT>`.
 #
-# Nothing is dropped, encoded, or changed here. Run once; scripts 2 and 3 read the output.
+# Nothing is dropped, encoded, or changed here. Run once; scripts 2 and 3 read the
+# output.
 #
 # Expected raw layout (unzipped NHTSA national CSV archives):
 #     project/data/FARS2016NationalCSV/{accident,vehicle,person}.csv
@@ -19,16 +20,23 @@
 from pathlib import Path
 import pandas as pd
 
-YEARS = range(2016, 2024)   # 2016-2023 inclusive
-SAVE_FORMAT = "parquet"         # "csv" (~300 MB/year) or "parquet" (~20 MB/year, needs pyarrow)
+YEARS = range(2016, 2024)  # 2016-2023 inclusive
+SAVE_FORMAT = (
+    "parquet"  # "csv" (~300 MB/year) or "parquet" (~20 MB/year, needs pyarrow)
+)
 
 # Paths are anchored to this file (project/scripts/), so outputs land in project/
 # no matter which directory the script is run from.
 try:
     PROJECT_DIR = Path(__file__).resolve().parent.parent
-except NameError:  # running cell by cell in Jupyter / VS Code, where __file__ is undefined
-    PROJECT_DIR = next(p for p in (Path.cwd(), Path.cwd().parent, Path.cwd() / "project")
-                       if (p / "scripts" / "init_load.py").exists())
+except (
+    NameError
+):  # running cell by cell in Jupyter / VS Code, where __file__ is undefined
+    PROJECT_DIR = next(
+        p
+        for p in (Path.cwd(), Path.cwd().parent, Path.cwd() / "project")
+        if (p / "scripts" / "init_load.py").exists()
+    )
 DATA_DIR = PROJECT_DIR / "data"
 OUT_DIR = PROJECT_DIR / "processed" / "preprocessed"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -46,24 +54,49 @@ def find_file(folder, name):
 def load_year(year):
     """Join vehicle and accident details onto each person for one year."""
     year_dir = DATA_DIR / f"FARS{year}NationalCSV"
-    read = lambda name: pd.read_csv(find_file(year_dir, name), encoding="latin-1", low_memory=False)
-    accident, vehicle, person = read("accident.csv"), read("vehicle.csv"), read("person.csv")
+    read = lambda name: pd.read_csv(
+        find_file(year_dir, name), encoding="latin-1", low_memory=False
+    )
+    accident, vehicle, person = (
+        read("accident.csv"),
+        read("vehicle.csv"),
+        read("person.csv"),
+    )
 
-    df = person.merge(vehicle, on=["ST_CASE", "VEH_NO"], how="left",
-                      suffixes=("", "_VEH"), validate="many_to_one")
-    df = df.merge(accident, on="ST_CASE", how="left",
-                  suffixes=("", "_ACC"), validate="many_to_one")
+    df = person.merge(
+        vehicle,
+        on=["ST_CASE", "VEH_NO"],
+        how="left",
+        suffixes=("", "_VEH"),
+        validate="many_to_one",
+    )
+    df = df.merge(
+        accident,
+        on="ST_CASE",
+        how="left",
+        suffixes=("", "_ACC"),
+        validate="many_to_one",
+    )
 
     # Same checks as load_fars_year.ipynb
     assert len(df) == len(person), "Row count changed during merge"
-    assert df.shape[1] == person.shape[1] + (vehicle.shape[1] - 2) + (accident.shape[1] - 1)
-    assert not df.duplicated(["ST_CASE", "VEH_NO", "PER_NO"]).any(), "Duplicate person keys"
+    assert df.shape[1] == person.shape[1] + (vehicle.shape[1] - 2) + (
+        accident.shape[1] - 1
+    )
+    assert not df.duplicated(
+        ["ST_CASE", "VEH_NO", "PER_NO"]
+    ).any(), "Duplicate person keys"
 
     # Older person files may lack YEAR; add it so multi-year work can tell rows apart.
     if "YEAR" not in df:
         df["YEAR"] = year
-    return df, {"year": year, "crashes": len(accident), "vehicles": len(vehicle),
-                "people": len(df), "columns": df.shape[1]}
+    return df, {
+        "year": year,
+        "crashes": len(accident),
+        "vehicles": len(vehicle),
+        "people": len(df),
+        "columns": df.shape[1],
+    }
 
 
 # %%
@@ -82,9 +115,14 @@ for year in YEARS:
         df.to_csv(out_path, index=False)
     else:
         raise ValueError('SAVE_FORMAT must be "parquet" or "csv"')
-    info.update(status="saved", file=out_path.name, MB=round(out_path.stat().st_size / 1e6))
+    info.update(
+        status="saved", file=out_path.name, MB=round(out_path.stat().st_size / 1e6)
+    )
     summary.append(info)
-    print(f"{year}: {info['people']:,} people x {info['columns']} columns -> {out_path.name}")
+    print(
+        f"{year}: {info['people']:,} people x {info['columns']} columns -> "
+        f"{out_path.name}"
+    )
     del df  # free memory before the next year
 
 summary = pd.DataFrame(summary).set_index("year")
