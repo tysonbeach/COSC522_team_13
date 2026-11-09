@@ -1,5 +1,5 @@
 # Script 0: download and unzip FARS national CSV archives into project/data/
-# Run from project/ (or the repo root):  python script0_download_fars.py
+# Run from anywhere, e.g. the repo root:  python project/scripts/download_FARS.py
 # Re-running skips years that are already downloaded.
 import shutil
 import tempfile
@@ -10,7 +10,13 @@ from pathlib import Path
 YEARS = range(2016, 2024)  # 2016-2023
 URL = "https://static.nhtsa.gov/nhtsa/downloads/FARS/{y}/National/FARS{y}NationalCSV.zip"
 
-PROJECT_DIR = Path.cwd() if Path("load_fars_year.ipynb").exists() else Path.cwd() / "project"
+# Paths are anchored to this file (project/scripts/), so outputs land in project/
+# no matter which directory the script is run from.
+try:
+    PROJECT_DIR = Path(__file__).resolve().parent.parent
+except NameError:  # running cell by cell in Jupyter / VS Code, where __file__ is undefined
+    PROJECT_DIR = next(p for p in (Path.cwd(), Path.cwd().parent, Path.cwd() / "project")
+                       if (p / "scripts" / "init_load.py").exists())
 DATA_DIR = PROJECT_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
@@ -34,4 +40,4 @@ for y in YEARS:
     zip_path.unlink()  # keep only the unzipped folder
     print(f"{y}: saved to {target.relative_to(PROJECT_DIR)}")
 
-print("Done. Next: python script1_load_all_years.py")
+print("Done. Next: python project/scripts/init_load.py")

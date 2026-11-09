@@ -17,7 +17,7 @@
 #         processed/decision_tree/features_2016.json     (feature lists read by script 3)
 #         processed/decision_tree/multicollinearity/*.csv, *.png
 #
-# Run from `project/` or the repo root:  python script2_preprocess_2016.py
+# Run from anywhere, e.g. the repo root:  python project/scripts/preprocessing_2016.py
 
 # %%
 import json
@@ -47,7 +47,13 @@ HIGH_VIF = 5.0
 # Script 3 models exactly BASE_COLS minus DROP_COLS.
 DROP_COLS = []
 
-PROJECT_DIR = Path.cwd() if Path("load_fars_year.ipynb").exists() else Path.cwd() / "project"
+# Paths are anchored to this file (project/scripts/), so outputs land in project/
+# no matter which directory the script is run from.
+try:
+    PROJECT_DIR = Path(__file__).resolve().parent.parent
+except NameError:  # running cell by cell in Jupyter / VS Code, where __file__ is undefined
+    PROJECT_DIR = next(p for p in (Path.cwd(), Path.cwd().parent, Path.cwd() / "project")
+                       if (p / "scripts" / "init_load.py").exists())
 IN_PATH = PROJECT_DIR / "processed" / "preprocessed" / f"fars_{YEAR}_person.{LOAD_FORMAT}"
 RESULT_DIR = PROJECT_DIR / "processed" / "decision_tree"
 MC_DIR = RESULT_DIR / "multicollinearity"
@@ -55,7 +61,7 @@ MC_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% Load
 if not IN_PATH.exists():
-    raise FileNotFoundError(f"Missing {IN_PATH}. Run script1_load_all_years.py first.")
+    raise FileNotFoundError(f"Missing {IN_PATH}. Run scripts/init_load.py first.")
 df = pd.read_parquet(IN_PATH) if LOAD_FORMAT == "parquet" else pd.read_csv(IN_PATH, low_memory=False)
 if "YEAR" not in df:
     df["YEAR"] = YEAR

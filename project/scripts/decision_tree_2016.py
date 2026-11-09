@@ -13,7 +13,7 @@
 # Output: processed/decision_tree/figures/*.png
 #         processed/decision_tree/precrash_*.csv, summary_2016.md
 #
-# Run from `project/` or the repo root:  python script3_decision_tree_2016.py
+# Run from anywhere, e.g. the repo root:  python project/scripts/decision_tree_2016.py
 
 # %%
 import json
@@ -45,7 +45,13 @@ YEAR = 2016
 SEED = 522
 N_JOBS = 2
 
-PROJECT_DIR = Path.cwd() if Path("load_fars_year.ipynb").exists() else Path.cwd() / "project"
+# Paths are anchored to this file (project/scripts/), so outputs land in project/
+# no matter which directory the script is run from.
+try:
+    PROJECT_DIR = Path(__file__).resolve().parent.parent
+except NameError:  # running cell by cell in Jupyter / VS Code, where __file__ is undefined
+    PROJECT_DIR = next(p for p in (Path.cwd(), Path.cwd().parent, Path.cwd() / "project")
+                       if (p / "scripts" / "init_load.py").exists())
 RESULT_DIR = PROJECT_DIR / "processed" / "decision_tree"
 FIG_DIR = RESULT_DIR / "figures"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -74,7 +80,7 @@ in_path = RESULT_DIR / f"full_set_filtered_unscaled_{YEAR}.csv"
 features_path = RESULT_DIR / f"features_{YEAR}.json"
 for p in (in_path, features_path):
     if not p.exists():
-        raise FileNotFoundError(f"Missing {p}. Run script2_preprocess_2016.py first.")
+        raise FileNotFoundError(f"Missing {p}. Run scripts/preprocessing_2016.py first.")
 FULL_SET = pd.read_csv(in_path, low_memory=False)
 F = json.loads(features_path.read_text())
 ID_COLS, BASE_COLS = F["id_cols"], F["base_cols"]

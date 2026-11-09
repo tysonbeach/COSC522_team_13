@@ -12,7 +12,7 @@
 #     ...
 #     project/data/FARS2023NationalCSV/...
 #
-# Run from `project/` or the repo root:  python script1_load_all_years.py
+# Run from anywhere, e.g. the repo root:  python project/scripts/init_load.py
 # (The `# %%` markers also let you run it cell by cell in VS Code / Jupyter.)
 
 # %%
@@ -22,7 +22,13 @@ import pandas as pd
 YEARS = range(2016, 2024)   # 2016-2023 inclusive
 SAVE_FORMAT = "parquet"         # "csv" (~300 MB/year) or "parquet" (~20 MB/year, needs pyarrow)
 
-PROJECT_DIR = Path.cwd() if Path("load_fars_year.ipynb").exists() else Path.cwd() / "project"
+# Paths are anchored to this file (project/scripts/), so outputs land in project/
+# no matter which directory the script is run from.
+try:
+    PROJECT_DIR = Path(__file__).resolve().parent.parent
+except NameError:  # running cell by cell in Jupyter / VS Code, where __file__ is undefined
+    PROJECT_DIR = next(p for p in (Path.cwd(), Path.cwd().parent, Path.cwd() / "project")
+                       if (p / "scripts" / "init_load.py").exists())
 DATA_DIR = PROJECT_DIR / "data"
 OUT_DIR = PROJECT_DIR / "processed" / "preprocessed"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
