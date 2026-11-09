@@ -8,19 +8,25 @@ Year-to-year code harmonization (RECODES below) makes every year 2016-2023 use t
 same codes, based on fars_variable_lists.xlsx and the FARS Analytical User's Manual.
 DRUNK_DR (dropped from the accident file in 2021) is rebuilt from DR_DRINK.
 
-Multicollinearity check on the modeled (BASE) features, using the right measure for
-each pair of column types:
+Multicollinearity check, one report per feature tier (the exact columns each decision
+tree models), using the right measure for each pair of column types:
     numeric  x numeric   -> |Pearson r| (+ VIF for the numeric set)
     category x category  -> bias-corrected Cramer's V
     numeric  x category  -> correlation ratio (eta)
 All three are on a 0-1 scale, so they share one heatmap. The label FATAL is never used.
 
 Input:  processed/preprocessed/fars_<YEAR>_person.parquet   (from init_load.py)
+Three modeling datasets are saved, one per feature tier (see TIERS). All three hold
+exactly the same people, so the decision tree results are directly comparable:
+    base               pre-crash features only
+    base_impact        + crash/impact features
+    base_impact_post   + post-crash features
+
 Output (all in processed/decision_tree/<YEAR>/preprocessing/):
-        full_set_filtered_unscaled_<YEAR>.csv   (cohort read by decision_tree.py)
-        features_<YEAR>.json                    (feature lists read by decision_tree.py)
-        recode_audit_<YEAR>.csv                 (rows changed per recode rule)
-        multicollinearity/*.csv, *.png
+        dataset_<TIER>_<YEAR>.csv   (one per tier; read by decision_tree.py)
+        features_<YEAR>.json        (feature lists per tier; read by decision_tree.py)
+        recode_audit_<YEAR>.csv     (rows changed per recode rule)
+        multicollinearity/<TIER>/   (association tables + heatmap per tier)
 
 Run from anywhere, e.g. the repo root:  python project/scripts/preprocessing.py 2019
 (no year = 2016). From Jupyter, import this file and call main(2019).
@@ -48,7 +54,6 @@ from sklearn.linear_model import LinearRegression
 DEFAULT_YEAR = 2016
 VALID_YEARS = range(2016, 2024)
 LOAD_FORMAT = "parquet"  # must match SAVE_FORMAT in init_load.py
-CHECK_TIERS = "base"  # "base" (modeled features) or "all" (base + impact + post)
 APPLY_RECODES = True  # False reproduces the original (pre-harmonization) 2016 results
 
 # Thresholds used only to FLAG pairs; nothing is dropped automatically.
@@ -56,9 +61,14 @@ HIGH_ASSOC = 0.80  # |r|, Cramer's V, or eta at or above this = high
 MODERATE_ASSOC = 0.50
 HIGH_VIF = 5.0
 
-# After reviewing the report, list any BASE columns the team agrees to remove.
-# decision_tree.py models exactly BASE_COLS minus DROP_COLS.
-DROP_COLS = []
+# After reviewing the report, list any feature columns (base, impact or post) the team
+# agrees to remove. They are left out of every tier that would contain them.
+#   PERSONS: near-duplicate of PERMVIT (same in 99.5% of rows); PERSONS also counts
+#            occupants of parked vehicles, PERMVIT only motorists in transport.
+#   PEDS:    near-duplicate of PERNOTMVIT (same in 99.5% of rows); PERNOTMVIT also
+#            counts occupants of parked vehicles as non-motorists.
+#   Each pair split its importance between two bars; the MVIT versions are kept.
+DROP_COLS = ["PERSONS", "PEDS"]
 
 # Paths are anchored to this file (project/scripts/), so outputs land in project/
 # no matter which directory the script is run from.
@@ -126,6 +136,14 @@ IMPACT_COLS = [
     "DRUNK_DR",
 ]
 POST_COLS = ["AIR_BAG", "EJECTION", "EXTRICAT", "ROLLOVER", "DEFORMED", "FIRE_EXP"]
+
+# Feature tiers, each modeled separately by decision_tree.py. Every tier's dataset has
+# the same rows (the same cohort), so only the features differ between the runs.
+TIERS = {
+    "base": BASE_COLS,
+    "base_impact": BASE_COLS + IMPACT_COLS,
+    "base_impact_post": BASE_COLS + IMPACT_COLS + POST_COLS,
+}
 NUMERIC_COLS = [
     "AGE",
     "MOD_YEAR",
@@ -309,8 +327,8 @@ def preprocessing_dir(year):
     return DECISION_TREE_DIR / str(year) / "preprocessing"
 
 
-def multicollinearity_dir(year):
-    return preprocessing_dir(year) / "multicollinearity"
+def multicollinearity_dir(year, tier):
+    return preprocessing_dir(year) / "multicollinearity" / tier
 
 
 def parse_year():
@@ -525,11 +543,6 @@ def vif_table(numeric_df):
     return pd.DataFrame(rows).set_index("field").sort_values("VIF", ascending=False)
 
 
-def check_columns():
-    """Columns included in the multicollinearity check (set by CHECK_TIERS)."""
-    return BASE_COLS if CHECK_TIERS == "base" else BASE_COLS + IMPACT_COLS + POST_COLS
-
-
 def association_tables(full_set, check_cols):
     """Mixed-type association matrix, ranked pair table, and numeric VIF table."""
     num_cols = [c for c in check_cols if c in NUMERIC_COLS]
@@ -572,13 +585,13 @@ def association_tables(full_set, check_cols):
     return assoc, pairs, vif
 
 
-def save_association_tables(assoc, pairs, vif, year):
-    mc_dir = multicollinearity_dir(year)
-    pairs.to_csv(mc_dir / f"pairwise_association_{year}.csv", index=False)
-    assoc.to_csv(mc_dir / f"association_matrix_{year}.csv")
-    vif.to_csv(mc_dir / f"vif_numeric_{year}.csv")
+def save_association_tables(assoc, pairs, vif, year, tier):
+    mc_dir = multicollinearity_dir(year, tier)
+    pairs.to_csv(mc_dir / f"pairwise_association_{tier}_{year}.csv", index=False)
+    assoc.to_csv(mc_dir / f"association_matrix_{tier}_{year}.csv")
+    vif.to_csv(mc_dir / f"vif_numeric_{tier}_{year}.csv")
 
-    print(f"\nVIF for numeric {CHECK_TIERS} features (>= {HIGH_VIF} flagged):")
+    print(f"\nVIF for numeric {tier} features (>= {HIGH_VIF} flagged):")
     print(vif.round(3).to_string())
     flagged = pairs[pairs.flag != ""]
     print(
@@ -588,7 +601,7 @@ def save_association_tables(assoc, pairs, vif, year):
     print(flagged.round(3).to_string(index=False) if len(flagged) else "  none")
 
 
-def plot_association_heatmap(assoc, check_cols, year):
+def plot_association_heatmap(assoc, check_cols, year, tier):
     """Heatmap of the mixed association matrix; values >= MODERATE_ASSOC are printed."""
     fig, ax = plt.subplots(
         figsize=(0.45 * len(check_cols) + 3, 0.45 * len(check_cols) + 2)
@@ -613,26 +626,38 @@ def plot_association_heatmap(assoc, check_cols, year):
                 )
     fig.colorbar(im, ax=ax, fraction=0.035, label="|r| / Cramer's V / eta")
     ax.set_title(
-        f"FARS {year} {CHECK_TIERS} features: pairwise association (values >= "
+        f"FARS {year} {tier} features: pairwise association (values >= "
         f"{MODERATE_ASSOC} shown)"
     )
     fig.tight_layout()
     fig.savefig(
-        multicollinearity_dir(year) / f"association_heatmap_{year}.png", dpi=150
+        multicollinearity_dir(year, tier) / f"association_heatmap_{tier}_{year}.png",
+        dpi=150,
     )
     plt.show() if INTERACTIVE else plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
-# Save the cohort and the feature lists decision_tree.py will model
+# Save one dataset per tier and the feature lists decision_tree.py will model
 # ---------------------------------------------------------------------------
-def save_cohort(full_set, year):
-    unknown_drops = set(DROP_COLS) - set(BASE_COLS)
-    assert not unknown_drops, f"DROP_COLS not in BASE_COLS: {unknown_drops}"
-    base_features = [c for c in BASE_COLS if c not in DROP_COLS]
+def tier_features():
+    """Each tier's feature columns, minus DROP_COLS."""
+    all_features = BASE_COLS + IMPACT_COLS + POST_COLS
+    unknown_drops = set(DROP_COLS) - set(all_features)
+    assert not unknown_drops, f"DROP_COLS not feature columns: {unknown_drops}"
+    return {
+        tier: [c for c in cols if c not in DROP_COLS] for tier, cols in TIERS.items()
+    }
 
-    out_path = preprocessing_dir(year) / f"full_set_filtered_unscaled_{year}.csv"
-    full_set.to_csv(out_path, index=False)
+
+def save_tier_datasets(full_set, year):
+    """Save dataset_<TIER>_<YEAR>.csv per tier (same rows) and features_<YEAR>.json."""
+    tiers = tier_features()
+    print()
+    for tier, cols in tiers.items():
+        out_path = preprocessing_dir(year) / f"dataset_{tier}_{year}.csv"
+        full_set[ID_COLS + cols + ["FATAL"]].to_csv(out_path, index=False)
+        print(f"Saved {out_path.name}: {len(full_set):,} rows, {len(cols)} features")
     features = {
         "year": year,
         "id_cols": ID_COLS,
@@ -641,19 +666,12 @@ def save_cohort(full_set, year):
         "post_cols": POST_COLS,
         "numeric_cols": NUMERIC_COLS,
         "drop_cols": DROP_COLS,
-        "base_features": base_features,
+        "tiers": tiers,
     }
     (preprocessing_dir(year) / f"features_{year}.json").write_text(
         json.dumps(features, indent=2)
     )
-    print(
-        f"\nSaved {out_path.name}: {full_set.shape[0]:,} rows x {full_set.shape[1]} "
-        "columns"
-    )
-    print(
-        f"Modeled features for decision_tree.py: {len(base_features)} (dropped: "
-        f"{DROP_COLS or 'none'})"
-    )
+    print(f"Dropped columns: {DROP_COLS or 'none'}")
     print("Outputs in", preprocessing_dir(year).relative_to(PROJECT_DIR))
 
 
@@ -663,7 +681,9 @@ def save_cohort(full_set, year):
 def main(year=None):
     year = parse_year() if year is None else year
     print(f"FARS year: {year}")
-    multicollinearity_dir(year).mkdir(parents=True, exist_ok=True)
+    tiers = tier_features()
+    for tier in tiers:
+        multicollinearity_dir(year, tier).mkdir(parents=True, exist_ok=True)
 
     df = load_year(year)
     if APPLY_RECODES:
@@ -674,12 +694,14 @@ def main(year=None):
 
     full_set = build_cohort(df)
 
-    check_cols = check_columns()
-    assoc, pairs, vif = association_tables(full_set, check_cols)
-    save_association_tables(assoc, pairs, vif, year)
-    plot_association_heatmap(assoc, check_cols, year)
+    # One multicollinearity report per tier, on exactly the columns that tier models
+    for tier, check_cols in tiers.items():
+        print(f"\n--- Multicollinearity check: {tier} ({len(check_cols)} features)")
+        assoc, pairs, vif = association_tables(full_set, check_cols)
+        save_association_tables(assoc, pairs, vif, year, tier)
+        plot_association_heatmap(assoc, check_cols, year, tier)
 
-    save_cohort(full_set, year)
+    save_tier_datasets(full_set, year)
 
 
 if __name__ == "__main__":

@@ -1,20 +1,33 @@
-"""Script 3: pre-crash decision tree for one FARS year.
+"""Script 3: decision trees for one FARS year, one per feature tier.
 
 The modeling half of `decision_tree.ipynb` (everything after "Data ready"), unchanged
 in method: crash-grouped 80/20 holdout, train-only one-hot/imputation inside a
 Pipeline, grouped 5-fold CV, grid search by average precision, one holdout evaluation.
 
-Reads preprocessing.py's cohort and feature list. Every figure is saved as a PNG
-(and also shown when run from Jupyter).
+The whole pipeline runs once per feature tier (same people, same holdout split, only
+the features differ):
+    base               pre-crash features only
+    base_impact        + crash/impact features
+    base_impact_post   + post-crash features
+Every figure is saved as a PNG (and also shown when run from Jupyter).
 
 Input  (processed/decision_tree/<YEAR>/preprocessing/, from preprocessing.py):
-        full_set_filtered_unscaled_<YEAR>.csv
+        dataset_<TIER>_<YEAR>.csv
         features_<YEAR>.json
-Output (processed/decision_tree/<YEAR>/results/):
-        precrash_*.csv, medium_truck_counts_<YEAR>.csv, summary_<YEAR>.md
+Output (processed/decision_tree/<YEAR>/results/<TIER>/; names end _<TIER>_<YEAR>):
+        holdout_split_*_seed522.csv   person-level train/test assignment
+        baseline_cv_*.csv             CV scores of the baseline trees
+        grid_search_cv_*.csv          CV scores of every grid-search setting
+        holdout_metrics_*.csv         holdout metrics of every model
+        tree_complexity_*.csv         depth and leaves of every tree
+        feature_importances_*.csv     tuned tree's importances
+        medium_truck_counts_*.csv     descriptive count
+        summary_*.md                  short written summary
         figures/*.png
 
-Run from anywhere, e.g. the repo root:  python project/scripts/decision_tree.py 2019
+Run from anywhere, e.g. the repo root:
+    python project/scripts/decision_tree.py 2019                  all three tiers
+    python project/scripts/decision_tree.py 2019 --tier base      one tier
 (no year = 2016). From Jupyter, import this file and call main(2019).
 """
 
@@ -83,6 +96,9 @@ except (
     )
 DECISION_TREE_DIR = PROJECT_DIR / "processed" / "decision_tree"
 
+# Feature tiers written by preprocessing.py; each is modeled separately.
+TIERS = ("base", "base_impact", "base_impact_post")
+
 CRASH_KEY = ["YEAR", "STATE", "ST_CASE"]
 PERSON_KEY = CRASH_KEY + ["VEH_NO", "PER_NO"]
 
@@ -121,21 +137,28 @@ def preprocessing_dir(year):
     return DECISION_TREE_DIR / str(year) / "preprocessing"
 
 
-def output_dir(year):
-    """processed/decision_tree/<YEAR>/results/ (this script's outputs)."""
-    return DECISION_TREE_DIR / str(year) / "results"
+def output_dir(year, tier):
+    """processed/decision_tree/<YEAR>/results/<TIER>/ (this script's outputs)."""
+    return DECISION_TREE_DIR / str(year) / "results" / tier
 
 
-def figure_dir(year):
-    return output_dir(year) / "figures"
+def figure_dir(year, tier):
+    return output_dir(year, tier) / "figures"
 
 
-def parse_year():
-    """Year from the command line (DEFAULT_YEAR in Jupyter, which has its own argv)."""
+def output_file(year, tier, name, ext="csv"):
+    """results/<TIER>/<name>_<TIER>_<YEAR>.<ext>: tier and year stay in the file name,
+    so a file is still identifiable when copied out of its folder."""
+    return output_dir(year, tier) / f"{name}_{tier}_{year}.{ext}"
+
+
+def parse_args():
+    """Year and tiers from the command line (defaults in Jupyter, which has its own
+    argv)."""
     if INTERACTIVE:
-        return DEFAULT_YEAR
+        return DEFAULT_YEAR, TIERS
     parser = argparse.ArgumentParser(
-        description="FARS pre-crash decision tree for one year"
+        description="FARS decision trees for one year, one per feature tier"
     )
     parser.add_argument(
         "year",
@@ -146,7 +169,13 @@ def parse_year():
         metavar="YEAR",
         help="FARS year, 2016-2023 (default: %(default)s)",
     )
-    return parser.parse_args().year
+    parser.add_argument(
+        "--tier",
+        choices=TIERS,
+        help="run only this feature tier (default: all three)",
+    )
+    args = parser.parse_args()
+    return args.year, (args.tier,) if args.tier else TIERS
 
 
 def show(df_or_text):
@@ -162,9 +191,9 @@ def show(df_or_text):
         print()
 
 
-def save_fig(fig, name, year):
+def save_fig(fig, name, year, tier):
     """Save every figure as a PNG; show it only when running interactively."""
-    path = figure_dir(year) / f"{name}_{year}.png"
+    path = figure_dir(year, tier) / f"{name}_{tier}_{year}.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
     print(f"Saved figure: {path.relative_to(PROJECT_DIR)}")
     plt.show() if INTERACTIVE else plt.close(fig)
@@ -173,45 +202,45 @@ def save_fig(fig, name, year):
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
-def load_inputs(year):
-    """preprocessing.py's cohort and feature lists for this year."""
-    in_path = preprocessing_dir(year) / f"full_set_filtered_unscaled_{year}.csv"
+def load_inputs(year, tier):
+    """preprocessing.py's dataset for this tier, and the feature lists for this year."""
+    in_path = preprocessing_dir(year) / f"dataset_{tier}_{year}.csv"
     features_path = preprocessing_dir(year) / f"features_{year}.json"
     for p in (in_path, features_path):
         if not p.exists():
             raise FileNotFoundError(f"Missing {p}. Run scripts/preprocessing.py first.")
-    full_set = pd.read_csv(in_path, low_memory=False)
+    dataset = pd.read_csv(in_path, low_memory=False)
     features = json.loads(features_path.read_text())
     print(
-        f"Loaded {in_path.name}: {full_set.shape[0]:,} rows; "
-        f"modeling {len(features['base_features'])} base features"
+        f"Loaded {in_path.name}: {dataset.shape[0]:,} rows; "
+        f"modeling {len(features['tiers'][tier])} features ({tier})"
     )
-    return full_set, features
+    return dataset, features
 
 
-def leakage_cols(features):
-    """Columns that must never be model inputs: IDs, label, impact and post-crash."""
-    return set(
-        features["id_cols"]
-        + ["FATAL"]
-        + features["impact_cols"]
-        + features["post_cols"]
+def leakage_cols(features, tier):
+    """Columns that must never be model inputs for this tier: IDs, the label, and every
+    feature column outside the tier (e.g. impact and post-crash columns for base)."""
+    all_features = (
+        features["base_cols"] + features["impact_cols"] + features["post_cols"]
     )
+    outside_tier = set(all_features) - set(features["tiers"][tier])
+    return set(features["id_cols"] + ["FATAL"]) | outside_tier
 
 
-def model_data(full_set, features):
+def model_data(dataset, features, tier):
     """Sorted person-level table, features X, label y, and crash group ids."""
-    base_features = features["base_features"]
-    base_df = full_set[features["id_cols"] + ["FATAL"] + base_features]
-    assert not base_df[PERSON_KEY].isna().any().any(), "Missing identity values"
-    assert not base_df.duplicated(PERSON_KEY).any(), "Duplicated person records"
-    model_df = base_df.sort_values(PERSON_KEY).reset_index(drop=True)
-    X = model_df[base_features].copy()
+    model_features = features["tiers"][tier]
+    tier_df = dataset[features["id_cols"] + ["FATAL"] + model_features]
+    assert not tier_df[PERSON_KEY].isna().any().any(), "Missing identity values"
+    assert not tier_df.duplicated(PERSON_KEY).any(), "Duplicated person records"
+    model_df = tier_df.sort_values(PERSON_KEY).reset_index(drop=True)
+    X = model_df[model_features].copy()
     y = model_df["FATAL"].astype(int)
     groups = pd.Series(
         pd.factorize(pd.MultiIndex.from_frame(model_df[CRASH_KEY]))[0], index=X.index
     )
-    assert not (set(X.columns) & leakage_cols(features))
+    assert not (set(X.columns) & leakage_cols(features, tier))
     assert set(y.unique()) == {0, 1}
     return model_df, X, y, groups
 
@@ -232,12 +261,13 @@ def holdout_split(X, y, groups):
     return train_idx, test_idx
 
 
-def save_split_manifest(model_df, test_idx, year):
+def save_split_manifest(model_df, test_idx, year, tier):
     manifest = model_df[PERSON_KEY + ["FATAL"]].copy()
     manifest["split"] = "train"
     manifest.loc[test_idx, "split"] = "test"
     manifest.to_csv(
-        output_dir(year) / f"precrash_split_{year}_seed{SEED}.csv", index=False
+        output_dir(year, tier) / f"holdout_split_{tier}_{year}_seed{SEED}.csv",
+        index=False,
     )
 
 
@@ -408,7 +438,7 @@ def tree_complexity(fitted_models, X_train, y_train):
     ).set_index("model")
 
 
-def plot_confusion_matrices(y_test, predictions, year):
+def plot_confusion_matrices(y_test, predictions, year, tier):
     fig, axes = plt.subplots(1, len(predictions), figsize=(4 * len(predictions), 3.7))
     for ax, name in zip(axes, predictions):
         ConfusionMatrixDisplay.from_predictions(
@@ -421,12 +451,14 @@ def plot_confusion_matrices(y_test, predictions, year):
             values_format="d",
         )
         ax.set_title(name)
-    fig.suptitle(f"Holdout confusion matrices, FARS {year} (rows = actual)")
+    fig.suptitle(
+        f"Holdout confusion matrices, FARS {year}, {tier} features (rows = actual)"
+    )
     fig.tight_layout()
-    save_fig(fig, "confusion_matrices", year)
+    save_fig(fig, "confusion_matrices", year, tier)
 
 
-def plot_roc_pr(y_test, probabilities, model_names, year):
+def plot_roc_pr(y_test, probabilities, model_names, year, tier):
     fig, (roc_ax, pr_ax) = plt.subplots(1, 2, figsize=(13, 5))
     for name in model_names:
         RocCurveDisplay.from_predictions(
@@ -441,16 +473,16 @@ def plot_roc_pr(y_test, probabilities, model_names, year):
     )
     roc_ax.legend(fontsize=8)
     pr_ax.legend(fontsize=8)
-    roc_ax.set_title("Holdout ROC curves")
-    pr_ax.set_title("Holdout precision-recall curves")
+    roc_ax.set_title(f"Holdout ROC curves ({tier} features)")
+    pr_ax.set_title(f"Holdout precision-recall curves ({tier} features)")
     fig.tight_layout()
-    save_fig(fig, "roc_pr_curves", year)
+    save_fig(fig, "roc_pr_curves", year, tier)
 
 
 # ---------------------------------------------------------------------------
 # 5. Tree diagram and feature importances (training data only; not causal)
 # ---------------------------------------------------------------------------
-def plot_tree_diagram(view_model, year):
+def plot_tree_diagram(view_model, year, tier):
     fig, ax = plt.subplots(figsize=(24, 12))
     plot_tree(
         view_model.named_steps["tree"],
@@ -463,24 +495,26 @@ def plot_tree_diagram(view_model, year):
         fontsize=7,
         ax=ax,
     )
-    ax.set_title("Depth-4 baseline: first three split levels (training data)")
+    ax.set_title(
+        f"Depth-4 baseline ({tier} features): first three split levels (training data)"
+    )
     fig.tight_layout()
-    save_fig(fig, "tree_depth4", year)
+    save_fig(fig, "tree_depth4", year, tier)
 
 
-def original_field(encoded, base_features):
+def original_field(encoded, model_features):
     """Map an encoded column name (e.g. categorical__BODY_TYP_34.0) to its field."""
     name = encoded.split("__", 1)[1]
     matches = [
         c
-        for c in base_features
+        for c in model_features
         if name == c or name.startswith(c + "_") or name == "missingindicator_" + c
     ]
     assert len(matches) == 1, (encoded, matches)
     return matches[0]
 
 
-def feature_importances(model, base_features):
+def feature_importances(model, model_features):
     """Per-encoded-column importances, and importances summed by original field."""
     feature_names = model.named_steps["preprocess"].get_feature_names_out()
     importances = pd.Series(
@@ -490,7 +524,7 @@ def feature_importances(model, base_features):
     ).sort_values(ascending=False)
     importance_table = importances.rename_axis("encoded_feature").reset_index()
     importance_table["field"] = importance_table["encoded_feature"].map(
-        lambda encoded: original_field(encoded, base_features)
+        lambda encoded: original_field(encoded, model_features)
     )
     grouped_importance = (
         importance_table.groupby("field")["importance"]
@@ -500,16 +534,16 @@ def feature_importances(model, base_features):
     return importances, importance_table, grouped_importance
 
 
-def plot_importances(importances, grouped_importance, year):
+def plot_importances(importances, grouped_importance, year, tier):
     fig, axes = plt.subplots(1, 2, figsize=(15, 7))
     importances.head(15).sort_values().plot.barh(ax=axes[0])
     grouped_importance.head(15).sort_values().plot.barh(ax=axes[1])
-    axes[0].set_title("Tuned model: encoded-column importance")
-    axes[1].set_title("Tuned model: importance summed by original field")
+    axes[0].set_title(f"Tuned model ({tier}): encoded-column importance")
+    axes[1].set_title(f"Tuned model ({tier}): importance summed by original field")
     for ax in axes:
         ax.set_xlabel("Training impurity reduction (not causal)")
     fig.tight_layout()
-    save_fig(fig, "feature_importance", year)
+    save_fig(fig, "feature_importance", year, tier)
 
 
 # ---------------------------------------------------------------------------
@@ -539,12 +573,21 @@ def medium_truck_counts(model_df):
 # 7. Run summary (generated from this run's metrics)
 # ---------------------------------------------------------------------------
 def run_summary(
-    y, groups, y_test, g_test, test_results, best_params, grouped_importance
+    tier,
+    n_features,
+    y,
+    groups,
+    y_test,
+    g_test,
+    test_results,
+    best_params,
+    grouped_importance,
 ):
     chosen = test_results.loc[SELECTED_NAME]
     unres = test_results.loc["Unrestricted"]
     d4 = test_results.loc["Depth 4"]
     return (
+        f"**Feature set:** {tier} ({n_features} features).\n\n"
         f"**Data:** {len(y):,} occupants from {groups.nunique():,} crashes; holdout "
         f"{len(y_test):,} "
         f"occupants / {g_test.nunique():,} crashes, no crash overlap.\n\n"
@@ -576,22 +619,22 @@ def show_summary(summary):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-def main(year=None):
-    year = parse_year() if year is None else year
-    print(f"FARS year: {year}")
-    out_dir = output_dir(year)
-    figure_dir(year).mkdir(parents=True, exist_ok=True)
+def run_tier(year, tier):
+    """The full modeling pipeline for one year and one feature tier."""
+    print(f"\n{'-' * 25} FARS {year}, feature tier: {tier} {'-' * 25}")
+    out_dir = output_dir(year, tier)
+    figure_dir(year, tier).mkdir(parents=True, exist_ok=True)
 
     # Data and holdout split
-    full_set, features = load_inputs(year)
-    base_features = features["base_features"]
-    model_df, X, y, groups = model_data(full_set, features)
+    dataset, features = load_inputs(year, tier)
+    model_features = features["tiers"][tier]
+    model_df, X, y, groups = model_data(dataset, features, tier)
 
     train_idx, test_idx = holdout_split(X, y, groups)
     X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
     y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
     g_train, g_test = groups.iloc[train_idx], groups.iloc[test_idx]
-    save_split_manifest(model_df, test_idx, year)
+    save_split_manifest(model_df, test_idx, year, tier)
     show(
         pd.DataFrame(
             [
@@ -603,15 +646,15 @@ def main(year=None):
     print(library_versions())
 
     # Baselines
-    numeric_cols = [c for c in base_features if c in features["numeric_cols"]]
-    categorical_cols = [c for c in base_features if c not in features["numeric_cols"]]
+    numeric_cols = [c for c in model_features if c in features["numeric_cols"]]
+    categorical_cols = [c for c in model_features if c not in features["numeric_cols"]]
     candidates = {
         name: make_tree(numeric_cols, categorical_cols, **params)
         for name, params in BASELINE_PARAMS.items()
     }
     cv_splits = grouped_cv_splits(X_train, y_train, g_train)
     cv_comparison = baseline_cv(candidates, X_train, y_train, cv_splits)
-    cv_comparison.to_csv(out_dir / f"precrash_baseline_cv_{year}.csv")
+    cv_comparison.to_csv(output_file(year, tier, "baseline_cv"))
     show(cv_comparison.round(4))
 
     # Grid search
@@ -619,7 +662,7 @@ def main(year=None):
         make_tree(numeric_cols, categorical_cols), X_train, y_train, cv_splits
     )
     cv_results = pd.DataFrame(search.cv_results_).sort_values("rank_test_ap")
-    cv_results.to_csv(out_dir / f"precrash_cv_{year}.csv", index=False)
+    cv_results.to_csv(output_file(year, tier, "grid_search_cv"), index=False)
     show(
         cv_results[
             [
@@ -647,44 +690,73 @@ def main(year=None):
     # Holdout evaluation
     all_models = {"Majority dummy": dummy, **fitted_models}
     test_results, predictions, probabilities = evaluate_all(all_models, X_test, y_test)
-    test_results.to_csv(out_dir / f"precrash_test_metrics_{year}.csv")
+    test_results.to_csv(output_file(year, tier, "holdout_metrics"))
     show(test_results.round(4))
     print(f"Holdout prevalence / no-skill AP reference: {y_test.mean():.4f}")
 
     complexity = tree_complexity(fitted_models, X_train, y_train)
-    complexity.to_csv(out_dir / f"precrash_tree_complexity_{year}.csv")
+    complexity.to_csv(output_file(year, tier, "tree_complexity"))
     show(complexity)
 
-    plot_confusion_matrices(y_test, predictions, year)
-    plot_roc_pr(y_test, probabilities, list(fitted_models), year)
+    plot_confusion_matrices(y_test, predictions, year, tier)
+    plot_roc_pr(y_test, probabilities, list(fitted_models), year, tier)
 
     # Tree diagram and importances
-    plot_tree_diagram(fitted_models["Depth 4"], year)
+    plot_tree_diagram(fitted_models["Depth 4"], year, tier)
     importances, importance_table, grouped_importance = feature_importances(
-        selected_model, base_features
+        selected_model, model_features
     )
-    importance_table.to_csv(out_dir / f"precrash_importances_{year}.csv", index=False)
-    plot_importances(importances, grouped_importance, year)
+    importance_table.to_csv(output_file(year, tier, "feature_importances"), index=False)
+    plot_importances(importances, grouped_importance, year, tier)
     show(grouped_importance.to_frame().round(4))
 
     # Medium-truck count
     truck_audit = medium_truck_counts(model_df)
-    truck_audit.to_csv(out_dir / f"medium_truck_counts_{year}.csv")
+    truck_audit.to_csv(output_file(year, tier, "medium_truck_counts"))
     show(truck_audit)
 
     # Run summary
     summary = run_summary(
-        y, groups, y_test, g_test, test_results, search.best_params_, grouped_importance
+        tier,
+        len(model_features),
+        y,
+        groups,
+        y_test,
+        g_test,
+        test_results,
+        search.best_params_,
+        grouped_importance,
     )
-    (out_dir / f"summary_{year}.md").write_text(summary)
+    output_file(year, tier, "summary", "md").write_text(summary)
     show_summary(summary)
     assert all(
         not (
-            set(m.named_steps["preprocess"].feature_names_in_) & leakage_cols(features)
+            set(m.named_steps["preprocess"].feature_names_in_)
+            & leakage_cols(features, tier)
         )
         for m in fitted_models.values()
     )
     print("Completed. Outputs in", out_dir.relative_to(PROJECT_DIR))
+    return model_df[PERSON_KEY].to_numpy(), test_idx
+
+
+def main(year=None, tiers=None):
+    """Run every requested tier for the year (all three by default)."""
+    if year is None:
+        year, parsed_tiers = parse_args()
+        tiers = tiers or parsed_tiers
+    tiers = tiers or TIERS
+    print(f"FARS year: {year}; feature tiers: {', '.join(tiers)}")
+    splits = {tier: run_tier(year, tier) for tier in tiers}
+
+    # The tiers must model the same people with the same holdout split, so that only
+    # the features differ between them.
+    first_people, first_test = next(iter(splits.values()))
+    for tier, (people, test_idx) in splits.items():
+        assert (people == first_people).all(), f"{tier}: different people"
+        assert (test_idx == first_test).all(), f"{tier}: different holdout split"
+    if len(splits) > 1:
+        print(f"\nChecked: all {len(splits)} tiers used the same people and split.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,12 @@
+column,years,mapping,rows_changed,reason
+ROLLOVER,2022-later,{8: 0},6875,Not Applicable (8) split off from No Rollover (0) in 2022; merged back
+DEFORMED,2022-later,{7: 8},12935,"Damage Reported, Extent Unknown (7) split off from Not Reported (8) in 2022; merged back"
+BODY_TYP,2017-later,{84: 88},286,Motor Scooter (84) split off from Other Motored Cycle (88) in 2017 (manual p. 139)
+BODY_TYP,2017-later,"{85: 82, 86: 82, 87: 82}",82,autocycle/three-wheel codes 85-87 split off from Three-Wheel Motorcycle (82) in 2017 (manual p. 139)
+BODY_TYP,2017-later,{96: 97},454,off-highway utility vehicles (96) split off from Other Vehicle Type (97) in 2017 (manual p. 140)
+SEAT_POS,2019-later,{56: 55},4,Appended to a Motor Vehicle for Motion (56) split off from Riding on Vehicle Exterior (55) in 2019 (manual p. 302)
+TOW_VEH,2022-later,{7: 1},13,Trailing Unit Other than a Trailer (7) split off in 2022; before 2022 any trailing unit was 1 (manual pp. 144-145)
+VTCONT_F,2016-later,"{2: 1, 4: 1}",73,"Not Functioning (1), Functioning Improperly (2) and the 2019+ combined code (4) merged into 1 in all years, since 4 cannot be split back (manual p. 232)"
+VTRAFWAY,2022-later,{7: 9},532,"JUDGMENT CALL: Divided, Unknown Median Type (7, 2022+) was coded 2, 3 or 9 before; mapped to 9 (unknown) as the closest single code (manual p. 223)"
+REST_USE,2019-later,{6: 97},2,"JUDGMENT CALL: Racing-Style Harness (6, 2019+) most likely coded Other (97) before; could have been 8 (type unknown) (manual p. 304)"
+DRUNK_DR,2021-later,rebuilt from DR_DRINK,92768,DRUNK_DR removed from the accident file in 2021

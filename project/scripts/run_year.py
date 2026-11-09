@@ -1,6 +1,7 @@
 """Run the full per-year pipeline: preprocessing.py, then decision_tree.py.
 
-Outputs go to processed/decision_tree/<YEAR>/preprocessing/ and .../<YEAR>/results/.
+Outputs go to processed/decision_tree/<YEAR>/preprocessing/ and
+.../<YEAR>/results/<TIER>/ (one folder per feature tier).
 Requires the loaded table from init_load.py:
     processed/preprocessed/fars_<YEAR>_person.parquet
 
