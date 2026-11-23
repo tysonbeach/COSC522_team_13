@@ -1,0 +1,4 @@
+model,depth,leaves,train_accuracy
+Unrestricted,46,8772,0.99966926529648
+Depth 4,4,16,0.7412000944956296
+Tuned (CV AP),23,316,0.7534372785258682

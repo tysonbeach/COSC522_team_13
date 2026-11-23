@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="1100" viewBox="0 0 1140 1100" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>FARS pipeline: how the files flow</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <style>
+      .stage { fill: #EEF2FF; stroke: #4F46E5; stroke-width: 1.5; }
+      .data { fill: #F8FAFC; stroke: #94A3B8; stroke-width: 1.2; }
+      .next { fill: #FFFFFF; stroke: #94A3B8; stroke-width: 1.2; stroke-dasharray: 6 4; }
+      .badge { fill: #4F46E5; }
+      .badge-text { fill: #FFFFFF; font-size: 14px; font-weight: 700; text-anchor: middle; }
+      .script { fill: #1E1B4B; font-size: 14px; font-weight: 700; }
+      .mono { font-family: SFMono-Regular, Menlo, Consolas, monospace; }
+      .module { fill: #3730A3; font-size: 12px; }
+      .path { fill: #0F172A; font-size: 12px; font-weight: 600; }
+      .note { fill: #475569; font-size: 11.5px; }
+      .tracked { fill: #15803D; font-size: 11px; font-weight: 600; }
+      .ignored { fill: #9A3412; font-size: 11px; font-weight: 600; }
+      .flow { stroke: #475569; stroke-width: 1.6; fill: none; }
+      .h1 { fill: #0F172A; font-size: 22px; font-weight: 700; }
+      .sub { fill: #475569; font-size: 13px; }
+      .panel-title { fill: #14532D; font-size: 14px; font-weight: 700; }
+      .shared { fill: #14532D; font-size: 13px; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1140" height="1100" fill="#FFFFFF"/>
+
+  <!-- Title -->
+  <text x="40" y="44" class="h1">FARS pipeline: how the files flow</text>
+  <text x="40" y="68" class="sub">Each stage is a thin script in project/scripts/ that calls one module in project/fars/. Paths are relative to project/.</text>
+
+  <!-- Source -->
+  <rect x="370" y="100" width="300" height="36" rx="18" fill="#FFF7ED" stroke="#F59E0B" stroke-width="1.2"/>
+  <text x="520" y="123" text-anchor="middle" font-size="13" fill="#7C2D12">NHTSA FARS national CSVs (2016–2023)</text>
+  <line x1="520" y1="136" x2="520" y2="158" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- Stage 1 -->
+  <rect x="330" y="160" width="380" height="64" rx="10" class="stage"/>
+  <circle cx="358" cy="192" r="14" class="badge"/><text x="358" y="197" class="badge-text">1</text>
+  <text x="384" y="186" class="script mono">01_download.py</text>
+  <text x="384" y="206" class="module mono">fars/download.py</text>
+  <text x="520" y="206" class="note">· download + unzip</text>
+  <line x1="520" y1="224" x2="520" y2="246" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- data/ -->
+  <rect x="330" y="248" width="380" height="58" rx="6" class="data"/>
+  <text x="344" y="271" class="path mono">data/FARS&lt;YEAR&gt;NationalCSV/</text>
+  <text x="696" y="271" text-anchor="end" class="ignored">ignored</text>
+  <text x="344" y="292" class="note">accident.csv · vehicle.csv · person.csv</text>
+  <line x1="520" y1="306" x2="520" y2="328" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- Stage 2 -->
+  <rect x="330" y="330" width="380" height="64" rx="10" class="stage"/>
+  <circle cx="358" cy="362" r="14" class="badge"/><text x="358" y="367" class="badge-text">2</text>
+  <text x="384" y="356" class="script mono">02_load.py</text>
+  <text x="384" y="376" class="module mono">fars/load.py</text>
+  <text x="484" y="376" class="note">· person ⋈ vehicle ⋈ accident</text>
+  <line x1="520" y1="394" x2="520" y2="416" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- processed/joined -->
+  <rect x="330" y="418" width="380" height="58" rx="6" class="data"/>
+  <text x="344" y="441" class="path mono">processed/joined/</text>
+  <text x="696" y="441" text-anchor="end" class="ignored">ignored</text>
+  <text x="344" y="462" class="note"><tspan class="mono">fars_&lt;YEAR&gt;_person.parquet</tspan> · one row per person</text>
+  <line x1="520" y1="476" x2="520" y2="498" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- Stage 3 -->
+  <rect x="290" y="500" width="460" height="80" rx="10" class="stage"/>
+  <circle cx="318" cy="540" r="14" class="badge"/><text x="318" y="545" class="badge-text">3</text>
+  <text x="344" y="524" class="script mono">03_preprocess.py</text>
+  <text x="344" y="544" class="module mono">fars/preprocess.py</text>
+  <text x="344" y="566" class="note"><tspan class="mono">recodes.py</tspan> harmonize codes → <tspan class="mono">cohort.py</tspan> label, occupants, population</text>
+  <line x1="520" y1="580" x2="520" y2="602" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- processed/datasets -->
+  <rect x="290" y="604" width="460" height="84" rx="6" class="data"/>
+  <text x="304" y="627" class="path mono">processed/datasets/&lt;POP&gt;/&lt;YEAR&gt;/</text>
+  <text x="304" y="649" class="note"><tspan class="mono">dataset_&lt;YEAR&gt;.csv</tspan> · all blocks' columns, one row per occupant</text>
+  <text x="736" y="649" text-anchor="end" class="ignored">ignored</text>
+  <text x="304" y="671" class="note"><tspan class="mono">features_&lt;YEAR&gt;.json</tspan> · recode_audit · medium_truck_counts</text>
+  <text x="736" y="671" text-anchor="end" class="tracked">tracked</text>
+
+  <!-- split to stages 4 and 5 -->
+  <path d="M520,688 V712 H340 V734" class="flow" marker-end="url(#arrow)"/>
+  <path d="M520,712 H700 V734" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- Stage 4 -->
+  <rect x="170" y="736" width="340" height="80" rx="10" class="stage" stroke-dasharray="6 4"/>
+  <circle cx="198" cy="776" r="14" class="badge"/><text x="198" y="781" class="badge-text">4</text>
+  <text x="224" y="760" class="script mono">04_multicollinearity.py</text>
+  <text x="496" y="802" text-anchor="end" class="note" font-style="italic">optional</text>
+  <text x="224" y="780" class="module mono">fars/multicollinearity.py</text>
+  <text x="224" y="802" class="note">|r| · Cramér's V · eta · VIF</text>
+  <line x1="340" y1="816" x2="340" y2="838" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- Stage 5 -->
+  <rect x="530" y="736" width="340" height="80" rx="10" class="stage"/>
+  <circle cx="558" cy="776" r="14" class="badge"/><text x="558" y="781" class="badge-text">5</text>
+  <text x="584" y="760" class="script mono">05_decision_tree.py</text>
+  <text x="584" y="780" class="module mono">fars/decision_tree.py</text>
+  <text x="584" y="802" class="note">uses <tspan class="mono">modeling.py</tspan>: split, CV, metrics</text>
+  <line x1="700" y1="816" x2="700" y2="838" class="flow" marker-end="url(#arrow)"/>
+
+  <!-- reports -->
+  <rect x="170" y="840" width="340" height="84" rx="6" class="data"/>
+  <text x="184" y="863" class="path mono">processed/reports/multicollinearity/</text>
+  <text x="184" y="884" class="note mono">&lt;POP&gt;/&lt;YEAR&gt;/&lt;BLOCK&gt;/</text>
+  <text x="184" y="906" class="note">association tables + heatmap</text>
+  <text x="496" y="906" text-anchor="end" class="tracked">tracked</text>
+
+  <!-- results -->
+  <rect x="530" y="840" width="340" height="106" rx="6" class="data"/>
+  <text x="544" y="863" class="path mono">processed/results/decision_tree/</text>
+  <text x="544" y="884" class="note mono">&lt;POP&gt;/&lt;YEAR&gt;/holdout_split_&lt;YEAR&gt;_seed522.csv</text>
+  <text x="544" y="905" class="note mono">&lt;POP&gt;/&lt;YEAR&gt;/&lt;BLOCK&gt;/</text>
+  <text x="544" y="927" class="note">metrics · CV · importances · summary · figures</text>
+  <text x="856" y="905" text-anchor="end" class="tracked">tracked</text>
+
+  <!-- next models -->
+  <rect x="530" y="966" width="340" height="56" rx="10" class="next"/>
+  <text x="544" y="989" class="note"><tspan font-weight="700" fill="#334155">Next:</tspan> <tspan class="mono">06_random_forest.py</tspan>, <tspan class="mono">07_xgboost.py</tspan></text>
+  <text x="544" y="1009" class="note">same shape as stage 5, reuse <tspan class="mono">modeling.py</tspan></text>
+
+  <!-- run.py bracket over stages 3-5 -->
+  <path d="M164,500 H152 V816 H164" fill="none" stroke="#4F46E5" stroke-width="1.6"/>
+  <text x="140" y="642" text-anchor="end" class="script mono" font-size="13">run.py</text>
+  <text x="140" y="660" text-anchor="end" class="note">runs 3 → 5 per year;</text>
+  <text x="140" y="676" text-anchor="end" class="note">adds 4 with <tspan class="mono">--mc</tspan></text>
+
+  <!-- Shared modules panel -->
+  <rect x="890" y="160" width="230" height="430" rx="10" fill="#F0FDF4" stroke="#16A34A" stroke-width="1.3"/>
+  <text x="906" y="186" class="panel-title">Shared by every stage</text>
+  <text x="906" y="204" class="note">project/fars/</text>
+
+  <text x="906" y="236" class="shared mono">config.py</text>
+  <text x="906" y="254" class="note">paths, years, seed, column</text>
+  <text x="906" y="270" class="note">lists, BLOCKS, DROP_COLS</text>
+
+  <text x="906" y="302" class="shared mono">paths.py</text>
+  <text x="906" y="320" class="note">where each stage reads</text>
+  <text x="906" y="336" class="note">and writes its files</text>
+
+  <text x="906" y="368" class="shared mono">cli.py</text>
+  <text x="906" y="386" class="note">years (full or 2016 2019 …),</text>
+  <text x="906" y="402" class="note">--population, --block</text>
+
+  <text x="906" y="434" class="shared mono">figures.py</text>
+  <text x="906" y="452" class="note">matplotlib setup, save_fig</text>
+
+  <text x="906" y="484" class="shared mono">modeling.py</text>
+  <text x="906" y="502" class="note">shared by every model:</text>
+  <text x="906" y="518" class="note">split, CV, metrics, plots</text>
+
+  <text x="906" y="550" class="shared mono">scripts/_path.py</text>
+  <text x="906" y="568" class="note">lets scripts import fars</text>
+
+  <!-- Blocks panel -->
+  <rect x="890" y="610" width="230" height="122" rx="10" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.2"/>
+  <text x="906" y="636" class="panel-title" style="fill:#0F172A">Feature blocks</text>
+  <text x="906" y="660" class="note mono" font-weight="700">A_precrash</text><text x="1006" y="660" class="note">Run 1 · 26</text>
+  <text x="906" y="682" class="note mono" font-weight="700">AB_crash</text><text x="1006" y="682" class="note">Run 2 · 40</text>
+  <text x="906" y="704" class="note mono" font-weight="700">ABC_post</text><text x="1006" y="704" class="note">Run 3 · 46</text>
+  <text x="906" y="722" class="note" font-size="10.5">same occupants + split in every block</text>
+
+  <!-- Legend -->
+  <g transform="translate(170,1056)">
+    <rect x="0" y="0" width="28" height="18" rx="5" class="stage"/>
+    <text x="36" y="13" class="note">stage: script + module</text>
+    <rect x="196" y="0" width="28" height="18" rx="3" class="data"/>
+    <text x="232" y="13" class="note">files on disk:</text>
+    <text x="314" y="13" class="tracked">tracked</text>
+    <text x="364" y="13" class="note">in git ·</text>
+    <text x="410" y="13" class="ignored">ignored</text>
+    <text x="462" y="13" class="note">(large; regenerate with stages 1–3)</text>
+    <rect x="690" y="0" width="28" height="18" rx="5" class="next"/>
+    <text x="726" y="13" class="note">optional / next</text>
+  </g>
+</svg>

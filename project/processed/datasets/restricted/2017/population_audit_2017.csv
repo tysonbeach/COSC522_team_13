@@ -1,0 +1,6 @@
+population,stage,occupants,crashes,fatal_share
+restricted,before,72373,32667,0.3999281500006909
+restricted,excluded_motorcycle,5689,4946,0.8804710845491299
+restricted,after_motorcycle,66684,30363,0.35893167776378143
+restricted,excluded_single_modeled_occupant,13727,13727,0.548408246521454
+restricted,retained,52957,16636,0.3098173990218479

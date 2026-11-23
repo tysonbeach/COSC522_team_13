@@ -1,7 +1,13 @@
 misc/data/
 .DS_Store
+__pycache__/
 project/data/*
 !project/data/.gitkeep
-project/processed/**
-!project/processed/**/
-!project/processed/**/.gitkeep
+
+# Outputs: results and reports are tracked so the team sees them; large data is not.
+project/processed/joined/*.parquet
+project/processed/datasets/**/dataset_*.csv
+project/processed/preprocessed/
+project/processed/fars_*_person.csv
+project/processed/logistic_regression/*.csv
+project/processed/decision_tree/
