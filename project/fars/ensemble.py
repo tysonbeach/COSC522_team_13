@@ -64,6 +64,13 @@ def make_pipeline(spec, numeric_cols, categorical_cols, **params):
     return pipeline.set_params(preprocess__sparse_threshold=0)
 
 
+def as_number(value):
+    """Some saved decision-tree tables hold numbers as text, e.g. "np.float64(0.74)"."""
+    if isinstance(value, str):
+        value = value.strip().removeprefix("np.float64(").removesuffix(")")
+    return float(value)
+
+
 def reference_metrics(data, block):
     """The tuned decision tree's holdout row for the same block, if it has been run."""
     path = block_dir(REFERENCE_MODEL, data.population, data.year, block)
@@ -71,7 +78,7 @@ def reference_metrics(data, block):
     if not path.exists():
         return None
     table = pd.read_csv(path, index_col="model")
-    return table.loc[TUNED] if TUNED in table.index else None
+    return table.loc[TUNED].map(as_number) if TUNED in table.index else None
 
 
 def summary_text(spec, data, block, test_results, search, by_field):

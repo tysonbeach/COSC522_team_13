@@ -11,10 +11,10 @@
 
 ## Current step
 
-**Random forest and XGBoost are implemented and piloted on 2016 (restricted); next, review the code and run all years for both populations on the agreed machine.**
+**Random forest and XGBoost are run and committed for all eight years and both populations. Next: calibration and SHAP on the best model (XGBoost).**
 
 - RF/XGBoost (Nov 23, Iffat): `fars/random_forest.py`, `fars/xgboost_model.py`, the shared loop `fars/ensemble.py`, scripts `06_random_forest.py` and `07_xgboost.py`, and `run.py --models`. Same splits, CV folds, pipeline, tuning rule and metrics as the decision tree; each run first checks its split against the decision-tree manifest. See the Nov 23 RF/XGBoost log entry for the pilot checks and limitations.
-- The 2016 pilot was not run on the agreed machine, so its numbers are not final results and no RF/XGBoost result files are committed.
+- All-year results (Nov 24, Iffat's Windows laptop, at Tyson's request) for both models and both populations. XGBoost is best, then random forest, then the tree, in every year, block and population. See **Nov 24 RF/XGBoost results** in the Log.
 
 Decision-tree baseline (Nov 20):
 
@@ -24,7 +24,7 @@ Decision-tree baseline (Nov 20):
 - Removed the `NUMOCCS` row-exclusion rule. Preserved speed exclusions: `VSPD_LIM` 0, 98, 99.
 - Verified saved outputs and cohort/split consistency for all 48 runs. See **Nov 20 rerun results** below.
 
-**Next:** review the RF/XGBoost code and grids (PR), then run `06_random_forest.py full` and `07_xgboost.py full` for both populations on the agreed machine. Calibration and SHAP follow on the best model.
+**Next:** calibration and SHAP on XGBoost (Tyson, Nov 24: these come before the transfer tests); then the temporal and spatial transfer tests.
 
 ---
 
@@ -137,7 +137,7 @@ User ran full and restricted on this machine; outputs reviewed Nov 20. Unweighte
 | Midterm presentation and report | Nov 10 | Done |
 | Refactor scripts into `fars/` package + numbered scripts | Nov 18 | Done, verified identical (branch `refactor-scripts`, not committed) |
 | **Exclusions and variable drops; re-run baseline** | Week of Nov 9 | **Done Nov 20; results reviewed** |
-| Random forest (benchmark) and XGBoost (primary) | Weeks of Nov 16–23 | **Implemented Nov 23; 2016 restricted pilot verified; all-year runs on the agreed machine pending** |
+| Random forest (benchmark) and XGBoost (primary) | Weeks of Nov 16–23 | **Done Nov 24 (both models, both populations, all eight years)** |
 | Calibration and SHAP | Weeks of Nov 16–23 | Planned |
 | Transfer, time: train 2016–2020 → test 2021–2023 | Weeks of Nov 16–23 | Planned |
 | Transfer, space: train on one state group → test on a disjoint group | Weeks of Nov 16–23 | Planned |
@@ -326,6 +326,16 @@ The other reviewed fields, including `VPICBODYCLASS`, `HELM_USE`, `HELM_MIS`, an
 ---
 
 ## Log
+
+### 2026-11-24 (RF/XGBoost results, Iffat)
+- Ran all eight years of `07_xgboost.py` and `06_random_forest.py` for both populations on Iffat's Windows laptop (Python 3.12, scikit-learn 1.9.1, xgboost 3.4.1, conda env `fars`), as agreed with Tyson. The decision-tree results remain those from the Nov 20 run on Tyson's machine. Before modeling, the rebuilt datasets reproduced the committed load summary, population audits and feature metadata for every year and both populations (no tracked dataset file changed), and every RF/XGBoost run confirmed its split against the committed decision-tree manifest.
+- `config.N_JOBS` was raised to 8 locally to use the laptop's cores; this changes run time only, not results, and was not committed (team value remains 2).
+- Fix: the full-population decision-tree `holdout_metrics_*.csv` files store `macro_f1` as text such as `np.float64(0.7388)`, which stopped the first XGBoost full run while it wrote its summary. `ensemble.py` now parses those values (`as_number`). The decision-tree files themselves were not changed; regenerating them would store plain numbers.
+- Validation: all 96 runs (2 models × 2 populations × 8 years × 3 blocks) have every output file; all metrics are finite; macro-F1 agrees with the saved TN/FP/FN/TP; holdout sizes are identical across the tree, RF and XGBoost for every year and block.
+- Results, tuned models, means over 2016–2023 (ROC-AUC / AP / macro-F1). Restricted (holdout prevalence 0.313): A_precrash tree 0.762 / 0.593 / 0.665, RF 0.787 / 0.627 / 0.673, XGBoost 0.794 / 0.637 / 0.688; AB_crash tree 0.802 / 0.642 / 0.697, RF 0.845 / 0.709 / 0.728, XGBoost 0.857 / 0.732 / 0.747; ABC_post tree 0.854 / 0.717 / 0.753, RF 0.885 / 0.768 / 0.778, XGBoost 0.895 / 0.789 / 0.790. Full (prevalence 0.402): A_precrash tree 0.820 / 0.768 / 0.741, RF 0.841 / 0.789 / 0.752, XGBoost 0.850 / 0.800 / 0.764; AB_crash tree 0.883 / 0.856 / 0.788, RF 0.909 / 0.884 / 0.814, XGBoost 0.917 / 0.894 / 0.823; ABC_post tree 0.913 / 0.886 / 0.822, RF 0.932 / 0.908 / 0.842, XGBoost 0.938 / 0.917 / 0.851.
+- AP is higher for XGBoost than RF, and for RF than the tree, in all 24 year-block combinations of both populations.
+- Interpretation: restricted scores are lower than full scores for every model because the restriction removes motorcyclists and single-occupant crashes, which are easy to predict, and lowers prevalence from about 40% to 31%; AP should be read against prevalence. The variable drops had little effect (full-population tree ABC AP 0.894 at the midterm, 0.886 after the drops).
+- Run time on the laptop with `N_JOBS` 8: XGBoost about 25 minutes per population; random forest about 2 hours (restricted) and 4.5 hours (full).
 
 ### 2026-11-23 (RF/XGBoost, Iffat)
 - Implemented random forest (benchmark) and XGBoost (primary) under the agreed protocol: the same population-specific crash-grouped holdout and five-fold `StratifiedGroupKFold` folds, imputation and one-hot encoding inside the pipeline, selection by mean CV average precision (`refit="ap"`), no class weighting, and one holdout scoring through the shared `modeling.evaluate`. New files: `fars/ensemble.py` (shared run loop), `fars/random_forest.py`, `fars/xgboost_model.py`, `scripts/06_random_forest.py`, `scripts/07_xgboost.py`. Changed: `fars/modeling.py` (added `check_split_matches`; nothing existing changed), `fars/__init__.py` (docstring), `scripts/run.py` (`--models`, default `decision_tree`, so the existing behaviour is unchanged). Python CRLF line endings preserved; new code passes Black at line length 100.

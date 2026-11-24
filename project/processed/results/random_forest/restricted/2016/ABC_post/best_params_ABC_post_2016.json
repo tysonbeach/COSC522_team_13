@@ -1,0 +1,8 @@
+{
+  "best_params": {
+    "model__max_features": 0.1,
+    "model__min_samples_leaf": 5,
+    "model__n_estimators": 300
+  },
+  "mean_cv_ap": 0.7581295648625505
+}
