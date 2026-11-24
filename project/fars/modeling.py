@@ -43,7 +43,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 from .config import CRASH_KEY, LABEL, N_JOBS, PERSON_KEY, SEED
 from .figures import plt
-from .paths import dataset_path, features_path, require
+from .paths import dataset_path, features_path, require, results_dir
 
 TEST_SIZE = 0.20  # share of crashes held out
 N_FOLDS = 5  # grouped CV folds within the training crashes
@@ -143,6 +143,19 @@ def split_manifest(data):
     manifest["split"] = "train"
     manifest.loc[data.test_idx, "split"] = "test"
     return manifest
+
+
+def check_split_matches(data, reference_model):
+    """The year's holdout assignment must equal the one saved by `reference_model`.
+    Every model family is compared on the same occupants and split; a mismatch stops
+    the run instead of silently replacing the saved manifest."""
+    name = f"holdout_split_{data.year}_seed{SEED}.csv"
+    path = require(results_dir(reference_model, data.population, data.year) / name, reference_model)
+    reference = pd.read_csv(path)
+    manifest = split_manifest(data)
+    if list(reference.columns) != list(manifest.columns) or not reference.equals(manifest):
+        raise AssertionError(f"Split differs from {path}; compare before modeling")
+    print(f"Split matches {reference_model} manifest: {len(manifest):,} occupants")
 
 
 def library_versions():
