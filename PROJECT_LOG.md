@@ -11,7 +11,12 @@
 
 ## Current step
 
-**Decision-tree reruns complete for both populations; review results, then add random forest and XGBoost.**
+**Random forest and XGBoost are run and committed for all eight years and both populations. Next: calibration and SHAP on the best model (XGBoost).**
+
+- RF/XGBoost (Nov 23, Iffat): `fars/random_forest.py`, `fars/xgboost_model.py`, the shared loop `fars/ensemble.py`, scripts `06_random_forest.py` and `07_xgboost.py`, and `run.py --models`. Same splits, CV folds, pipeline, tuning rule and metrics as the decision tree; each run first checks its split against the decision-tree manifest. See the Nov 23 RF/XGBoost log entry for the pilot checks and limitations.
+- All-year results (Nov 24, Iffat's Windows laptop, at Tyson's request) for both models and both populations. XGBoost is best, then random forest, then the tree, in every year, block and population. See **Nov 24 RF/XGBoost results** in the Log.
+
+Decision-tree baseline (Nov 20):
 
 - Both populations ran all eight years × three blocks with the original tuning grid.
 - Dropped predictors: `PERSONS`, `PEDS`, `NUMOCCS`, `PERNOTMVIT`. Retained `PERMVIT` and `VE_FORMS`; `VE_TOTAL` remains outside the blocks. Feature counts: 25 / 38 / 44.
@@ -19,7 +24,7 @@
 - Removed the `NUMOCCS` row-exclusion rule. Preserved speed exclusions: `VSPD_LIM` 0, 98, 99.
 - Verified saved outputs and cohort/split consistency for all 48 runs. See **Nov 20 rerun results** below.
 
-**Next:** review the updated baseline and implement RF/XGBoost with the same population-specific crash-grouped splits.
+**Next:** calibration and SHAP on XGBoost (Tyson, Nov 24: these come before the transfer tests); then the temporal and spatial transfer tests.
 
 ---
 
@@ -132,7 +137,7 @@ User ran full and restricted on this machine; outputs reviewed Nov 20. Unweighte
 | Midterm presentation and report | Nov 10 | Done |
 | Refactor scripts into `fars/` package + numbered scripts | Nov 18 | Done, verified identical (branch `refactor-scripts`, not committed) |
 | **Exclusions and variable drops; re-run baseline** | Week of Nov 9 | **Done Nov 20; results reviewed** |
-| Random forest (benchmark) and XGBoost (primary) | Weeks of Nov 16–23 | Planned |
+| Random forest (benchmark) and XGBoost (primary) | Weeks of Nov 16–23 | **Done Nov 24 (both models, both populations, all eight years)** |
 | Calibration and SHAP | Weeks of Nov 16–23 | Planned |
 | Transfer, time: train 2016–2020 → test 2021–2023 | Weeks of Nov 16–23 | Planned |
 | Transfer, space: train on one state group → test on a disjoint group | Weeks of Nov 16–23 | Planned |
@@ -167,9 +172,12 @@ project/
     cohort.py            label, occupant filter, unknown-code exclusions, population (full / restricted)
     modeling.py          model-agnostic: crash split, grouped CV, pipeline, metrics, plots, importances
     download.py, load.py, preprocess.py, multicollinearity.py, decision_tree.py   the stages
+    random_forest.py, xgboost_model.py   stages 6-7: estimator + tuning grid only
+    ensemble.py          run loop shared by RF and XGBoost (split check, CV, grid, holdout, outputs)
     figures.py, cli.py   matplotlib setup + save_fig; shared command-line arguments
   scripts/               thin, numbered entry points (each calls fars.<stage>.main)
-    01_download.py  02_load.py  03_preprocess.py  04_multicollinearity.py  05_decision_tree.py  run.py
+    01_download.py  02_load.py  03_preprocess.py  04_multicollinearity.py  05_decision_tree.py
+    06_random_forest.py  07_xgboost.py  run.py
   notebooks/             earlier notebooks (not used anymore; paths inside them may be stale)
   processed/             outputs; results + reports tracked, large data ignored (see How to run)
   data/                  raw FARS CSVs (gitignored)
@@ -265,7 +273,12 @@ python project/scripts/03_preprocess.py 2019                        # recodes + 
 python project/scripts/04_multicollinearity.py 2019                 # optional report, per block
 python project/scripts/05_decision_tree.py 2019                     # all three blocks
 python project/scripts/05_decision_tree.py 2019 --block A_precrash  # one block: A_precrash | AB_crash | ABC_post
+python project/scripts/06_random_forest.py 2019 --population restricted   # all three blocks
+python project/scripts/07_xgboost.py 2019 --population restricted         # all three blocks
+python project/scripts/run.py 2019 --models decision_tree random_forest xgboost
 ```
+
+**Random forest and XGBoost** need the decision-tree split manifest for the same year and population (`results/decision_tree/<POP>/<YEAR>/holdout_split_<YEAR>_seed522.csv`), and they stop if their own split differs from it. `run.py` runs only the decision tree unless `--models` is given. Grids (`PARAM_GRID`) are in `fars/random_forest.py` and `fars/xgboost_model.py`. Pilot timings on a 2-core machine with `N_JOBS = 2`, per year and population, all three blocks: random forest about 22 minutes, XGBoost about 6 minutes. At that speed, all eight years for both populations take roughly 6 hours (RF) and 1.6 hours (XGBoost); a larger `N_JOBS` on a machine with more cores shortens this without changing results.
 
 Stages 3–5 and `run.py` also take `--population full` or `--population restricted`. `restricted` excludes motorcycle occupants (`BODY_TYP` 80–89), then crashes with only one remaining modeled occupant after all cohort filters. `--block` works with `05_decision_tree.py` and `run.py`. Every script prints its options with `--help`. Stages 4 and 5 read the dataset that stage 3 saved, so re-run stage 3 whenever the cohort, the recodes or the features change.
 
@@ -279,6 +292,7 @@ Stages 3–5 and `run.py` also take `--population full` or `--population restric
 - `datasets/<POP>/<YEAR>/`: `dataset_<YEAR>.csv` (all blocks' columns), `features_<YEAR>.json`, `recode_audit_<YEAR>.csv`, `population_audit_<YEAR>.csv`, `medium_truck_counts_<YEAR>.csv`
 - `reports/multicollinearity/<POP>/<YEAR>/<BLOCK>/`: association tables and a heatmap
 - `results/decision_tree/<POP>/<YEAR>/`: `holdout_split_<YEAR>_seed522.csv`, plus a folder per `<BLOCK>/` holding `baseline_cv_*`, `grid_search_cv_*`, `holdout_metrics_*`, `tree_complexity_*`, `feature_importances_*`, `summary_*.md`, `figures/*.png`
+- `results/random_forest/` and `results/xgboost/`, same layout: `holdout_split_*` (identical to the decision tree's), `environment_<YEAR>.json`, and per `<BLOCK>/`: `baseline_cv_*` (default settings), `grid_search_cv_*`, `best_params_*.json`, `holdout_metrics_*` (majority dummy, default settings, tuned), `feature_importances_*`, `summary_*.md`, `figures/*.png`
 - `decision_tree/`: leftover from the old layout (untracked dataset CSVs only). Safe to delete.
 
 **Tracked in git:** everything under `results/` and `reports/`, plus `features_*.json`, `recode_audit_*.csv`, `population_audit_*.csv`, `medium_truck_counts_*.csv` and `load_summary.csv`. **Ignored:** `joined/*.parquet` and `datasets/**/dataset_*.csv` (regenerate them with steps 02–03).
@@ -305,13 +319,33 @@ The other reviewed fields, including `VPICBODYCLASS`, `HELM_USE`, `HELM_MIS`, an
 - [x] Preserve existing speed exclusions for this test: `VSPD_LIM` 0, 98, 99. Code 0 is substantive, not 0 mph; revisiting its representation is deferred.
 - [x] Motorcycle exclusion: use `BODY_TYP` 80–89, including mopeds/scooters/autocycles; retain ATVs (90) and snowmobiles (91).
 - [x] Exclude crashes with only one modeled occupant after all earlier cohort filters, including motorcycle removal. Count across all vehicles, not all persons (pedestrians are outside the modeled cohort).
-- [ ] Who on the team owns RF/XGBoost, transfer tests, and SHAP?
+- [ ] Who on the team owns transfer tests, calibration, and SHAP? (RF/XGBoost implementation: Iffat, Nov 23.)
 - [x] Preserve the current decision-tree grid for this rerun (Nov 20 decision).
 - [ ] Transfer by state: how should the state groups be chosen (random? region?) and how many?
 
 ---
 
 ## Log
+
+### 2026-11-24 (RF/XGBoost results, Iffat)
+- Ran all eight years of `07_xgboost.py` and `06_random_forest.py` for both populations on Iffat's Windows laptop (Python 3.12, scikit-learn 1.9.1, xgboost 3.4.1, conda env `fars`), as agreed with Tyson. The decision-tree results remain those from the Nov 20 run on Tyson's machine. Before modeling, the rebuilt datasets reproduced the committed load summary, population audits and feature metadata for every year and both populations (no tracked dataset file changed), and every RF/XGBoost run confirmed its split against the committed decision-tree manifest.
+- `config.N_JOBS` was raised to 8 locally to use the laptop's cores; this changes run time only, not results, and was not committed (team value remains 2).
+- Fix: the full-population decision-tree `holdout_metrics_*.csv` files store `macro_f1` as text such as `np.float64(0.7388)`, which stopped the first XGBoost full run while it wrote its summary. `ensemble.py` now parses those values (`as_number`). The decision-tree files themselves were not changed; regenerating them would store plain numbers.
+- Validation: all 96 runs (2 models × 2 populations × 8 years × 3 blocks) have every output file; all metrics are finite; macro-F1 agrees with the saved TN/FP/FN/TP; holdout sizes are identical across the tree, RF and XGBoost for every year and block.
+- Results, tuned models, means over 2016–2023 (ROC-AUC / AP / macro-F1). Restricted (holdout prevalence 0.313): A_precrash tree 0.762 / 0.593 / 0.665, RF 0.787 / 0.627 / 0.673, XGBoost 0.794 / 0.637 / 0.688; AB_crash tree 0.802 / 0.642 / 0.697, RF 0.845 / 0.709 / 0.728, XGBoost 0.857 / 0.732 / 0.747; ABC_post tree 0.854 / 0.717 / 0.753, RF 0.885 / 0.768 / 0.778, XGBoost 0.895 / 0.789 / 0.790. Full (prevalence 0.402): A_precrash tree 0.820 / 0.768 / 0.741, RF 0.841 / 0.789 / 0.752, XGBoost 0.850 / 0.800 / 0.764; AB_crash tree 0.883 / 0.856 / 0.788, RF 0.909 / 0.884 / 0.814, XGBoost 0.917 / 0.894 / 0.823; ABC_post tree 0.913 / 0.886 / 0.822, RF 0.932 / 0.908 / 0.842, XGBoost 0.938 / 0.917 / 0.851.
+- AP is higher for XGBoost than RF, and for RF than the tree, in all 24 year-block combinations of both populations.
+- Interpretation: restricted scores are lower than full scores for every model because the restriction removes motorcyclists and single-occupant crashes, which are easy to predict, and lowers prevalence from about 40% to 31%; AP should be read against prevalence. The variable drops had little effect (full-population tree ABC AP 0.894 at the midterm, 0.886 after the drops).
+- Run time on the laptop with `N_JOBS` 8: XGBoost about 25 minutes per population; random forest about 2 hours (restricted) and 4.5 hours (full).
+
+### 2026-11-23 (RF/XGBoost, Iffat)
+- Implemented random forest (benchmark) and XGBoost (primary) under the agreed protocol: the same population-specific crash-grouped holdout and five-fold `StratifiedGroupKFold` folds, imputation and one-hot encoding inside the pipeline, selection by mean CV average precision (`refit="ap"`), no class weighting, and one holdout scoring through the shared `modeling.evaluate`. New files: `fars/ensemble.py` (shared run loop), `fars/random_forest.py`, `fars/xgboost_model.py`, `scripts/06_random_forest.py`, `scripts/07_xgboost.py`. Changed: `fars/modeling.py` (added `check_split_matches`; nothing existing changed), `fars/__init__.py` (docstring), `scripts/run.py` (`--models`, default `decision_tree`, so the existing behaviour is unchanged). Python CRLF line endings preserved; new code passes Black at line length 100.
+- Grids, fixed before any holdout result was examined. RF: 300 trees, `max_features` {sqrt, 0.1}, `min_samples_leaf` {1, 5, 20}, full depth (6 settings). XGBoost: `n_estimators` {200, 500}, `max_depth` {3, 6}, `learning_rate` {0.05, 0.1}, `subsample` and `colsample_bytree` 0.8, `hist` trees, no early stopping (8 settings). Each family also cross-validates and scores its library-default settings as a baseline, beside the majority dummy.
+- The encoded features are passed to RF/XGBoost as a dense matrix (`sparse_threshold=0`). RF trained about eight times faster than on the sparse matrix, and XGBoost reads absent sparse entries as missing, which would have treated real zeros (for example `AGE` 0 or a missing-indicator of 0) as missing. No values change, because imputation already removes every NaN.
+- Pilot, 2016 restricted only, run outside the agreed machine (Linux, Python 3.13, scikit-learn 1.9.1, xgboost 3.4.1). Checks performed: the rebuilt 2016 restricted dataset reproduced the committed population audit and feature metadata (53,046 occupants / 16,586 crashes; 25/38/44 features); both models' splits equal the committed decision-tree manifest; a deliberately altered manifest stopped the run; all required files and figures exist for all three blocks; all holdout metrics are finite; fatal F1, macro-F1 and balanced accuracy agree with the saved TN/FP/FN/TP; importances cover exactly each block's fields and sum to 1.
+- Pilot holdout results for the tuned models (not final; the agreed machine may differ slightly). ROC-AUC / AP: block A RF 0.794 / 0.632, XGBoost 0.799 / 0.637 (tuned tree 0.770 / 0.597); block AB RF 0.850 / 0.714, XGBoost 0.860 / 0.731 (tree 0.806 / 0.650); block ABC RF 0.889 / 0.769, XGBoost 0.895 / 0.785 (tree 0.853 / 0.710). Holdout prevalence (no-skill AP) 0.314. The ordering XGBoost > RF > tree holds in every block.
+- Second pilot, 2016 restricted, on a Windows laptop (Python 3.12, scikit-learn 1.9.1, xgboost 3.4.1; also not the agreed machine). The rebuilt dataset again gave 53,046 occupants / 16,586 crashes, and both models' splits equal the decision-tree manifest. Random forest results were identical to the first pilot. XGBoost default-settings results were identical, but the tuned results differed by up to about 0.004 (holdout AP: A 0.637, AB 0.730, ABC 0.787), most likely because the row and column subsampling (0.8) does not reproduce exactly across operating systems even with the same seed.
+- Limitations. In blocks AB and ABC, XGBoost selected 500 rounds at learning rate 0.05, and RF selected `max_features` 0.1 in every block; both lie at an edge of their grids. In block A, the best XGBoost settings were effectively tied (mean CV AP within 0.001, against a fold standard deviation of about 0.010), so the two pilots selected different settings (500 rounds at depth 3 versus 200 rounds at depth 6) with the same holdout AP of 0.637. This sensitivity is a further reason to produce final results on one agreed machine. Any extension of the grids should be agreed and justified by CV results alone, because the 2016 restricted holdout has now been seen. The full population was not piloted. Fitted models are not saved (size); calibration and SHAP can refit the tuned model from `best_params_<BLOCK>_<YEAR>.json` on the same training rows. RF importances (impurity) and XGBoost importances (gain) are not on the same scale and are not causal; SHAP remains the planned comparison.
+- No RF/XGBoost result files are committed, because final results must come from the agreed machine. Next: review the PR, then on the agreed machine run `06_random_forest.py` and `07_xgboost.py` for one year per population as a check, then `full` for both populations, and record the results here.
 
 ### 2026-11-23
 - Added root `AGENTS.md` as the shared development and modeling guide for teammates and coding assistants; linked it from this log. Checked conventions against the shared modeling code, output path helpers, and existing project decisions. Documentation only; no models rerun.
