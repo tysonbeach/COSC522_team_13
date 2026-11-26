@@ -3,7 +3,7 @@
 > **Team project log**, tracked in the repo so everyone can read it: where the project stands, how to run it, what was decided and why.
 > Keep it current: update **Current step** and add a dated **Log** entry at the end of each work session.
 
-**Last updated:** 2026-11-23
+**Last updated:** 2026-11-26
 
 **Development conventions:** see [AGENTS.md](AGENTS.md) for repository structure, modeling protocol, validation, and team handoffs.
 
@@ -11,7 +11,9 @@
 
 ## Current step
 
-**Random forest and XGBoost are run and committed for all eight years and both populations. Next: calibration and SHAP on the best model (XGBoost).**
+**Calibration and SHAP code for the tuned XGBoost is written (Nov 26, Moamen; branch `moamen/calibration-shap`, stacked on `iffat/rf-xgboost`). Next: run stages 8-9 on real data for one year, then all years and both populations.**
+
+- Calibration and SHAP (Nov 26): `fars/calibration.py` (stage 8), `fars/shap_values.py` (stage 9), shared refit helper `fars/posthoc.py`, scripts `08_calibration.py` and `09_shap.py`, and `run.py --models calibration shap`. Tested end to end only on synthetic data with the real schema; **no real-data results yet**. See the Nov 26 log entry.
 
 - RF/XGBoost (Nov 23, Iffat): `fars/random_forest.py`, `fars/xgboost_model.py`, the shared loop `fars/ensemble.py`, scripts `06_random_forest.py` and `07_xgboost.py`, and `run.py --models`. Same splits, CV folds, pipeline, tuning rule and metrics as the decision tree; each run first checks its split against the decision-tree manifest. See the Nov 23 RF/XGBoost log entry for the pilot checks and limitations.
 - All-year results (Nov 24, Iffat's Windows laptop, at Tyson's request) for both models and both populations. XGBoost is best, then random forest, then the tree, in every year, block and population. See **Nov 24 RF/XGBoost results** in the Log.
@@ -24,7 +26,7 @@ Decision-tree baseline (Nov 20):
 - Removed the `NUMOCCS` row-exclusion rule. Preserved speed exclusions: `VSPD_LIM` 0, 98, 99.
 - Verified saved outputs and cohort/split consistency for all 48 runs. See **Nov 20 rerun results** below.
 
-**Next:** calibration and SHAP on XGBoost (Tyson, Nov 24: these come before the transfer tests); then the temporal and spatial transfer tests.
+**Next:** run calibration and SHAP on real data (2016 restricted first, then `full` for both populations) and record the results here; then the temporal and spatial transfer tests.
 
 ---
 
@@ -138,7 +140,7 @@ User ran full and restricted on this machine; outputs reviewed Nov 20. Unweighte
 | Refactor scripts into `fars/` package + numbered scripts | Nov 18 | Done, verified identical (branch `refactor-scripts`, not committed) |
 | **Exclusions and variable drops; re-run baseline** | Week of Nov 9 | **Done Nov 20; results reviewed** |
 | Random forest (benchmark) and XGBoost (primary) | Weeks of Nov 16–23 | **Done Nov 24 (both models, both populations, all eight years)** |
-| Calibration and SHAP | Weeks of Nov 16–23 | Planned |
+| Calibration and SHAP | Weeks of Nov 16–23 | **Code written Nov 26 (Moamen); real-data runs pending** |
 | Transfer, time: train 2016–2020 → test 2021–2023 | Weeks of Nov 16–23 | Planned |
 | Transfer, space: train on one state group → test on a disjoint group | Weeks of Nov 16–23 | Planned |
 | Final presentation and report | Nov 23 – Dec 4 | Planned |
@@ -276,6 +278,8 @@ python project/scripts/05_decision_tree.py 2019 --block A_precrash  # one block:
 python project/scripts/06_random_forest.py 2019 --population restricted   # all three blocks
 python project/scripts/07_xgboost.py 2019 --population restricted         # all three blocks
 python project/scripts/run.py 2019 --models decision_tree random_forest xgboost
+python project/scripts/08_calibration.py 2019 --population restricted     # needs XGBoost results
+python project/scripts/09_shap.py 2019 --population restricted            # needs XGBoost results
 ```
 
 **Random forest and XGBoost** need the decision-tree split manifest for the same year and population (`results/decision_tree/<POP>/<YEAR>/holdout_split_<YEAR>_seed522.csv`), and they stop if their own split differs from it. `run.py` runs only the decision tree unless `--models` is given. Grids (`PARAM_GRID`) are in `fars/random_forest.py` and `fars/xgboost_model.py`. Pilot timings on a 2-core machine with `N_JOBS = 2`, per year and population, all three blocks: random forest about 22 minutes, XGBoost about 6 minutes. At that speed, all eight years for both populations take roughly 6 hours (RF) and 1.6 hours (XGBoost); a larger `N_JOBS` on a machine with more cores shortens this without changing results.
@@ -293,6 +297,8 @@ Stages 3–5 and `run.py` also take `--population full` or `--population restric
 - `reports/multicollinearity/<POP>/<YEAR>/<BLOCK>/`: association tables and a heatmap
 - `results/decision_tree/<POP>/<YEAR>/`: `holdout_split_<YEAR>_seed522.csv`, plus a folder per `<BLOCK>/` holding `baseline_cv_*`, `grid_search_cv_*`, `holdout_metrics_*`, `tree_complexity_*`, `feature_importances_*`, `summary_*.md`, `figures/*.png`
 - `results/random_forest/` and `results/xgboost/`, same layout: `holdout_split_*` (identical to the decision tree's), `environment_<YEAR>.json`, and per `<BLOCK>/`: `baseline_cv_*` (default settings), `grid_search_cv_*`, `best_params_*.json`, `holdout_metrics_*` (majority dummy, default settings, tuned), `feature_importances_*`, `summary_*.md`, `figures/*.png`
+- `results/xgboost_calibration/<POP>/`: `calibration_all_years.csv`, `calibration_means.csv`; per `<YEAR>/`: `environment_*`, `refit_check_*`, and per `<BLOCK>/`: `calibration_cv_*`, `calibration_holdout_*`, `reliability_bins_*`, `selected_method_*.json`, `summary_*.md`, `figures/reliability_*.png`
+- `results/xgboost_shap/<POP>/`: `shap_all_years.csv`, `shap_means.csv`, `figures/shap_by_year_<BLOCK>.png`; per `<YEAR>/`: `environment_*`, `refit_check_*`, and per `<BLOCK>/`: `shap_by_field_*`, `shap_by_column_*`, `shap_by_category_*`, `summary_*.md`, `figures/shap_{importance,beeswarm,dependence,categories}_*.png`
 - `decision_tree/`: leftover from the old layout (untracked dataset CSVs only). Safe to delete.
 
 **Tracked in git:** everything under `results/` and `reports/`, plus `features_*.json`, `recode_audit_*.csv`, `population_audit_*.csv`, `medium_truck_counts_*.csv` and `load_summary.csv`. **Ignored:** `joined/*.parquet` and `datasets/**/dataset_*.csv` (regenerate them with steps 02–03).
@@ -319,13 +325,24 @@ The other reviewed fields, including `VPICBODYCLASS`, `HELM_USE`, `HELM_MIS`, an
 - [x] Preserve existing speed exclusions for this test: `VSPD_LIM` 0, 98, 99. Code 0 is substantive, not 0 mph; revisiting its representation is deferred.
 - [x] Motorcycle exclusion: use `BODY_TYP` 80–89, including mopeds/scooters/autocycles; retain ATVs (90) and snowmobiles (91).
 - [x] Exclude crashes with only one modeled occupant after all earlier cohort filters, including motorcycle removal. Count across all vehicles, not all persons (pedestrians are outside the modeled cohort).
-- [ ] Who on the team owns transfer tests, calibration, and SHAP? (RF/XGBoost implementation: Iffat, Nov 23.)
+- [ ] Who on the team owns the transfer tests? (RF/XGBoost implementation: Iffat, Nov 23. Calibration and SHAP: Moamen, Nov 26.)
 - [x] Preserve the current decision-tree grid for this rerun (Nov 20 decision).
 - [ ] Transfer by state: how should the state groups be chosen (random? region?) and how many?
 
 ---
 
 ## Log
+
+### 2026-11-26 (calibration and SHAP, Moamen)
+- Implemented stages 8-9 on branch `moamen/calibration-shap` (based on `iffat/rf-xgboost`, PR not yet merged). New files: `fars/posthoc.py` (shared refit and checks), `fars/calibration.py`, `fars/shap_values.py`, `scripts/08_calibration.py`, `scripts/09_shap.py`. Changed: `scripts/run.py` (`--models` accepts `calibration` and `shap`; default unchanged), `fars/__init__.py` (docstring). No existing module, cohort, split, grid or result changed. New Python files use CRLF and pass Black at 100.
+- **Refit:** fitted models are not saved, so both stages refit the tuned XGBoost from `best_params_<BLOCK>_<YEAR>.json` on the same training rows, after checking the split against both the decision-tree and XGBoost manifests. The refit is scored on the holdout and compared with the saved tuned row; `refit_check_<YEAR>.csv` records saved vs refit AP/ROC-AUC, whether the confusion counts match, and `reproduced`. A mismatch is reported, not fatal, because XGBoost subsampling differed across operating systems in the Nov 23 pilots.
+- **Calibration protocol** (nothing learned from the holdout): out-of-fold training probabilities from the saved five grouped folds; Platt (sigmoid on logit p) and isotonic maps fitted on those OOF probabilities and applied to the refit model (as `CalibratedClassifierCV(ensemble=False)`); methods compared by cross-fitting the maps over the OOF folds. Pre-declared rule: lowest mean CV Brier, and a more complex method (uncalibrated < sigmoid < isotonic) must win by more than 1e-4. Holdout reports Brier (and no-skill Brier), log loss, ECE and max bin error (10 equal-count bins), calibration intercept/slope, mean predicted vs observed fatal share, plus the shared `modeling.evaluate` metrics for every method. Prediction rule unchanged (fatal if p > 0.5).
+- **SHAP protocol:** exact TreeSHAP from XGBoost itself (`pred_contribs=True`, same values as `shap.TreeExplainer`; the `shap` package is not needed, so the `cosc522` env needs nothing new). All holdout occupants explained, on the log-odds scale; additivity (bias + SHAP = log-odds) asserted to 1e-3. One-hot and missing-indicator columns are summed to the original field (valid because SHAP is additive). Outputs per field, per encoded column, and per raw category value, plus the Spearman correlation between the SHAP and gain field rankings.
+- Both stages refresh across-year tables after each run (`calibration_means.csv`, `shap_means.csv`, and a SHAP-by-year heatmap per block) from whatever years exist on disk.
+- **Checks actually performed (synthetic data only, Linux, Python 3.13, scikit-learn 1.9.1, xgboost 3.4.1):** the FARS download host is not reachable from the environment used, so a synthetic dataset was built with the real 2016/2017 restricted and 2016 full feature lists, crash/vehicle/person keys and missing values. Both stages ran for all three blocks and two years without warnings; all output files and figures exist; SHAP additivity held to about 5e-6; SHAP ranked the fields that the synthetic label was built from at the top (AGE, EJECTION, REST_USE, EXTRICAT, MOD_YEAR, VSPD_LIM, HARM_EV), which checks the field mapping; after running `07_xgboost.py` on the synthetic data, the refit reproduced its saved holdout metrics exactly (`reproduced=True`); a `--block` rerun kept the other blocks' rows in `refit_check`; on the overfit synthetic model the CV rule chose sigmoid and the holdout slope moved from about 0.5 to about 0.93. Synthetic outputs were not committed.
+- Limitations: no real-data results yet. OOF probabilities come from models trained on 80% of the training rows, so the maps are fitted to slightly weaker models than the final refit (the usual `ensemble=False` caveat). SHAP and calibration describe one year's holdout, not other years or states (transfer tests); related fields can share SHAP credit; nothing is causal. Iffat's Nov 23 Python files (`ensemble.py`, `random_forest.py`, `xgboost_model.py`, `06_random_forest.py`, `07_xgboost.py`) are LF, not CRLF as noted; left unchanged.
+- Run time on synthetic data (about 10,000 occupants per year, 2 cores): about 16 s per year for calibration and 13 s for SHAP, all three blocks. Real data is 4-6 times larger per year; calibration does 6 XGBoost fits per block (5 OOF + refit), SHAP 1.
+- Next: on the machine whose XGBoost results are committed (Iffat's laptop, to reproduce exactly), run `08_calibration.py 2016 --population restricted` and `09_shap.py 2016 --population restricted`, confirm `refit_check_2016.csv` shows `reproduced=True`, then `full` for both populations; record results here.
 
 ### 2026-11-24 (RF/XGBoost results, Iffat)
 - Ran all eight years of `07_xgboost.py` and `06_random_forest.py` for both populations on Iffat's Windows laptop (Python 3.12, scikit-learn 1.9.1, xgboost 3.4.1, conda env `fars`), as agreed with Tyson. The decision-tree results remain those from the Nov 20 run on Tyson's machine. Before modeling, the rebuilt datasets reproduced the committed load summary, population audits and feature metadata for every year and both populations (no tracked dataset file changed), and every RF/XGBoost run confirmed its split against the committed decision-tree manifest.

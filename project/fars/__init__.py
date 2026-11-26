@@ -8,7 +8,10 @@ Stages, in order (each module has a main(years, ...) that the numbered scripts c
     decision_tree.py      5. decision trees                 -> processed/results/decision_tree/
     random_forest.py      6. random forests                 -> processed/results/random_forest/
     xgboost_model.py      7. XGBoost                        -> processed/results/xgboost/
+    calibration.py        8. calibration (tuned XGBoost)  -> processed/results/xgboost_calibration/
+    shap_values.py        9. SHAP (tuned XGBoost)         -> processed/results/xgboost_shap/
 Shared: config.py (settings, columns, blocks), paths.py, recodes.py, cohort.py,
 modeling.py (split, CV, pipeline, metrics, plots), ensemble.py (run loop shared by
-stages 6-7), figures.py, cli.py.
+stages 6-7), posthoc.py (refit and checks shared by stages 8-9),
+figures.py, cli.py.
 """

@@ -6,13 +6,15 @@ fars/config.py). Stages 1-2 (download, load) are run once, separately.
 
 --models picks the model stages (default: decision_tree only). Random forest and
 XGBoost check their split against the decision-tree manifest, so list decision_tree
-first (or have run it before) for a year and population.
+first (or have run it before) for a year and population. calibration and shap explain
+the tuned XGBoost, so they need its results (list xgboost before them, or run it first).
 
     python project/scripts/run.py full                          every year
     python project/scripts/run.py 2016 2023                     individual years
     python project/scripts/run.py full --mc                     + the multicollinearity report
     python project/scripts/run.py 2019 --block AB_crash         trees for one block only
     python project/scripts/run.py 2016 --models decision_tree random_forest xgboost
+    python project/scripts/run.py full --models calibration shap   (after xgboost)
 """
 
 import importlib
@@ -26,6 +28,8 @@ MODELS = {
     "decision_tree": "decision_tree",
     "random_forest": "random_forest",
     "xgboost": "xgboost_model",
+    "calibration": "calibration",
+    "shap": "shap_values",
 }
 
 if __name__ == "__main__":
