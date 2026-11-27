@@ -1,0 +1,9 @@
+{
+  "selected_method": "uncalibrated",
+  "rule": "lowest mean CV Brier; more complex method must win by > 0.0001",
+  "cv_brier": {
+    "uncalibrated": 0.1399826905438592,
+    "sigmoid": 0.14002549057970695,
+    "isotonic": 0.14010719164907537
+  }
+}

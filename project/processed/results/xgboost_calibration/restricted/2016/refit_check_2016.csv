@@ -1,0 +1,4 @@
+block,params,saved_roc_auc,refit_roc_auc,saved_ap,refit_ap,ap_difference,same_confusion_counts,reproduced
+A_precrash,"{""model__colsample_bytree"": 0.8, ""model__learning_rate"": 0.05, ""model__max_depth"": 6, ""model__n_estimators"": 200, ""model__subsample"": 0.8}",0.7998500447139398,0.799173295459312,0.6374014713168045,0.6354903227722006,-0.0019111485446038357,False,False
+AB_crash,"{""model__colsample_bytree"": 0.8, ""model__learning_rate"": 0.05, ""model__max_depth"": 6, ""model__n_estimators"": 500, ""model__subsample"": 0.8}",0.8600405655264751,0.8602669036309734,0.729653359262902,0.7311208486917102,0.0014674894288082552,False,False
+ABC_post,"{""model__colsample_bytree"": 0.8, ""model__learning_rate"": 0.05, ""model__max_depth"": 6, ""model__n_estimators"": 500, ""model__subsample"": 0.8}",0.8952242701896441,0.8953657524777228,0.7868746275888934,0.7854534346847741,-0.0014211929041192395,False,False
